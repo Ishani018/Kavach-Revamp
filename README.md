@@ -1,74 +1,56 @@
 # Kavach
 
-**Six small security ministers. One Speaker.**
+Kavach is a tool-call security monitor built around the original Kavach minister detectors and Speaker decision mechanism.
 
-Each minister checks one kind of risk in a proposed tool action and returns a vote. The Speaker combines those votes into one verdict. The Monitor only wires them together.
+## Core flow
 
-```mermaid
-flowchart TD
-    A["Proposed Tool Action"] --> M["Monitor"]
-
-    M --> V["VAULT"]
-    M --> E["EXECUTOR"]
-    M --> C["CHANNEL"]
-    M --> CO["COMPASS"]
-    M --> N["NAVIGATOR"]
-    M --> T["TRAJECTORY"]
-
-    V --> S["Speaker"]
-    E --> S
-    C --> S
-    CO --> S
-    N --> S
-    T --> S
-
-    S --> D{"Final Verdict"}
-    D --> AL["ALLOW"]
-    D --> BL["BLOCK"]
-    D --> R["REVIEW"]
-    D --> I["INDETERMINATE"]
-
-    classDef core fill:#eee8ff,stroke:#8268c9,color:#30234b
-    classDef minister fill:#f8f1e7,stroke:#b99b73,color:#493a2b
-    classDef verdict fill:#e6f3e8,stroke:#78a482,color:#24472b
-    class M,S core
-    class V,E,C,CO,N,T minister
-    class AL,BL,R,I verdict
+```text
+Tool call
+   |
+   +--> VAULT / EXECUTOR deterministic checks (prefilters.py)
+   +--> NAVIGATOR semantic retrieval (ministers.py + retrieval state)
+   +--> CHANNEL session taint checks (channel_taint.py)
+   +--> COMPASS intent-alignment checks (server.py)
+   +--> TRAJECTORY session-risk checks (trajectory.py)
+   |
+   v
+Speaker (speaker.py)
+   |
+   v
+BLOCK / ESCALATE / ALLOW
 ```
 
-## The ministers
+## Where to read the code
 
-| File | Responsibility | Current mechanism |
-|---|---|---|
-| `ministers/vault.py` | Secret and credential access | Explicit credential-path and secret-format rules |
-| `ministers/executor.py` | Dangerous command execution | Explicit command/code-execution patterns |
-| `ministers/channel.py` | Sensitive read followed by external send | Session-local taint tracking |
-| `ministers/compass.py` | Action versus user intent | Small lexical-overlap heuristic; REVIEW only |
-| `ministers/navigator.py` | Prompt-injection indicators | Explicit instruction-hijack patterns |
-| `ministers/trajectory.py` | Risk across a sequence of actions | Small session-history heuristic |
+| Component | Original implementation |
+|---|---|
+| VAULT and EXECUTOR | [`parliament/prefilters.py`](parliament/prefilters.py) |
+| Structural and AST parsing used by VAULT / EXECUTOR | [`parliament/struct_parse.py`](parliament/struct_parse.py), [`parliament/ast_parse.py`](parliament/ast_parse.py) |
+| NAVIGATOR semantic minister retrieval | [`parliament/ministers.py`](parliament/ministers.py) |
+| CHANNEL session-level taint | [`parliament/channel_taint.py`](parliament/channel_taint.py) |
+| COMPASS and live request wiring | [`parliament/server.py`](parliament/server.py) |
+| TRAJECTORY session risk | [`parliament/trajectory.py`](parliament/trajectory.py) |
+| Speaker verdict fusion | [`parliament/speaker.py`](parliament/speaker.py) |
+| Provenance and denial protection | [`parliament/provenance.py`](parliament/provenance.py), [`parliament/denial_shield.py`](parliament/denial_shield.py) |
 
-## Where the logic lives
+The files above are copied from the original `Ishani018/Kavach` repository without rewriting their implementation logic. Their existing imports and supporting files are retained because they are part of the original behaviour.
 
-- `src/kavach/ministers/` — one readable file per minister.
-- `src/kavach/speaker.py` — the only place that combines votes.
-- `src/kavach/monitor.py` — runs all six ministers, then calls the Speaker.
-- `src/kavach/models.py` — shared action and vote types.
-- `tests/` — malicious and benign examples.
+## Setup
 
-## Speaker rules
-
-1. Any `BLOCK` vote means `BLOCK`.
-2. Otherwise, any `REVIEW` vote means `REVIEW`.
-3. Otherwise, any `ABSTAIN` vote means `INDETERMINATE`.
-4. `ALLOW` requires every minister to explicitly allow.
-
-## Run the tests
+Use Python compatible with the original project and install its dependencies:
 
 ```bash
-python -m pip install -e .
-python -m unittest discover -s tests -v
+pip install -r requirements.txt
 ```
 
-## Important limitation
+The live FastAPI service is in `parliament/server.py`. Its runtime also expects the original model/corpus configuration and environment setup; installing the Python dependencies alone does not configure those external resources.
 
-This revamp uses intentionally small, inspectable rules. In particular, NAVIGATOR is **not** the original embedding/retrieval detector, and COMPASS is **not** a semantic intent model. These are first-pass heuristics, not production-validated security coverage. Each rule needs broader attack and benign regression tests before deployment.
+## Tests
+
+Run the original focused tests from the repository root:
+
+```bash
+python -m pytest parliament/test_*.py
+```
+
+Tests are retained from the original project. No claim is made here that the full live service has been started or end-to-end validated in this environment.
