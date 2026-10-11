@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "event_id": "evt-example-001",
+  "session_id": "session-example-001",
+  "runtime": {"name": "example-adapter", "interception_point": "before_tool_execution"},
+  "action": {"tool_name": "shell", "operation": "execute", "arguments": {"command": "echo hello"}},
+  "visibility": {
+    "action.arguments": "present",
+    "context.user_instruction": "not_available",
+    "context.tool_output": "omitted"
+  }
+}
