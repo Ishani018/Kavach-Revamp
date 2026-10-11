@@ -13,7 +13,7 @@ _DESTINATIONS = {
     "send_email", "share_file", "send_direct_message", "send_channel_message",
     "invite_user_to_slack", "send_message", "upload_file", "http_post", "post_message",
 }
-_DESTINATION_PATTERN = re.compile(r"(send|share|upload|post|email|message|external)", re.I)
+_DESTINATION_PATTERN = re.compile(r"^(send|share|upload|post|invite|publish|email|http_post)(_|$)", re.I)
 
 
 class ChannelMinister:
