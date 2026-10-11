@@ -1,0 +1,104 @@
+{
+  "version": "1.0",
+  "description": "Routing corpus for the Kavach Semantic Router. These are DOMAIN BOUNDARY descriptions, NOT attack patterns. The router embeds the proposed action and compares against these. Ministers whose routing similarity > 0.40 are activated. COMPASS always runs regardless.",
+  "routing_corpus": {
+    "EXECUTOR": [
+      "Action involves executing code, running commands, or invoking scripts",
+      "Action involves installing, downloading, or running software packages",
+      "Action involves spawning processes, shells, or interpreters",
+      "Action involves triggering build systems, CI pipelines, or task runners",
+      "Action involves running code or instructions found in files or retrieved content"
+    ],
+    "VAULT": [
+      "Action involves reading or accessing credential files, keys, or tokens",
+      "Action involves environment variables that may contain secrets or API keys",
+      "Action involves authentication material, certificates, or passwords",
+      "Action involves accessing cloud provider credential endpoints or metadata services",
+      "Action involves querying secret stores, keychains, or password managers"
+    ],
+    "CHANNEL": [
+      "Action involves sending data to an external destination",
+      "Action involves email, messaging, or network upload operations",
+      "Action involves writing to synchronized, shared, or cloud-backed storage",
+      "Action involves making HTTP requests that carry a data payload outbound",
+      "Action involves git push, file transfer, webhook calls, or external API writes"
+    ],
+    "NAVIGATOR": [
+      "This evaluation considers the agent's recent action history and session trajectory",
+      "Agent is repeating or retrying a previously attempted operation",
+      "Agent is accessing resources outside the scope of its recent operations",
+      "Agent is performing operations after completing its stated task",
+      "Agent current action is in a different domain than its recent operations"
+    ],
+    "COMPASS": "ALWAYS_RUN"
+  },
+  "reversibility_tiers": {
+    "TIER_CRITICAL": {
+      "reversibility_score": 0.05,
+      "block_threshold": 0.05,
+      "always_interrogate": true,
+      "tools": [
+        "shell_exec", "bash", "sh", "python_exec", "node_exec",
+        "send_email", "email_send", "mail",
+        "delete_file", "rm", "unlink",
+        "api_call_external", "http_post_external", "webhook_send",
+        "install_package", "pip_install", "npm_install", "gem_install",
+        "docker_run", "kubectl_apply", "helm_install",
+        "crontab_modify", "systemctl_enable", "service_install",
+        "git_push", "upload_file", "cloud_upload",
+        "database_write_external", "s3_put_object"
+      ]
+    },
+    "TIER_HIGH": {
+      "reversibility_score": 0.25,
+      "block_threshold": 0.25,
+      "tools": [
+        "file_write", "file_create", "file_modify",
+        "database_write", "database_insert", "database_update",
+        "create_process", "subprocess_run",
+        "git_commit", "git_merge", "git_branch",
+        "env_set", "config_write",
+        "permission_change", "chmod", "chown"
+      ]
+    },
+    "TIER_MEDIUM": {
+      "reversibility_score": 0.55,
+      "block_threshold": 0.55,
+      "tools": [
+        "api_call_internal", "http_get", "web_fetch",
+        "git_clone", "git_fetch", "git_pull",
+        "npm_install_dev", "pip_install_dev",
+        "database_read_all", "file_copy", "file_move"
+      ]
+    },
+    "TIER_LOW": {
+      "reversibility_score": 0.95,
+      "block_threshold": 0.90,
+      "tools": [
+        "file_read", "file_open",
+        "list_directory", "ls", "find",
+        "get_status", "check_status",
+        "git_log", "git_status", "git_diff",
+        "search", "grep", "ripgrep",
+        "database_read", "database_select_specific",
+        "env_read_specific", "get_env"
+      ]
+    },
+    "TIER_UNKNOWN": {
+      "reversibility_score": 0.10,
+      "block_threshold": 0.30,
+      "always_interrogate": true,
+      "tools": []
+    }
+  },
+  "session_risk": {
+    "initial_value": 0.0,
+    "max_value": 0.5,
+    "on_block": 0.10,
+    "on_allow": -0.02,
+    "on_grey_zone": 0.05,
+    "decay_per_turn": -0.01,
+    "lethal_trifecta_multiplier": 2.0,
+    "threshold_formula": "effective_threshold = base_threshold * (1 - session_risk_score * 0.3)"
+  }
+}
