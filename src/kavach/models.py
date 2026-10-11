@@ -20,11 +20,12 @@ class Verdict(str, Enum):
 
 @dataclass(frozen=True)
 class ActionEvent:
-    """The proposed tool action visible to Kavach at its interception point."""
+    """One proposed tool action, using only information visible to the adapter."""
     tool_name: str
     operation: str
     arguments: dict[str, Any]
     session_id: str = "unknown"
+    user_intent: str | None = None
 
 
 @dataclass(frozen=True)
