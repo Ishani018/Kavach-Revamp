@@ -5,18 +5,18 @@ Kavach is a tool-call security monitor. This repository preserves the original `
 ## How it works
 
 ```mermaid
-flowchart TD
-    A["Incoming tool call"] --> B["TRAJECTORY<br/>Score session history"]
-    B --> C["Deterministic checks<br/>VAULT · EXECUTOR · CHANNEL"]
-    C --> D{"Eligible confident<br/>BLOCK?"}
+flowchart LR
+    A["Incoming tool call"] --> B["TRAJECTORY"]
+    B --> C["VAULT · EXECUTOR · CHANNEL<br/>Deterministic checks"]
+    C --> D{"Confident eligible<br/>BLOCK?"}
     D -- Yes --> S["Speaker"]
-    D -- No --> E["COMPASS<br/>Compare with user intent"]
+    D -- No --> E["COMPASS"]
     E --> R["Semantic router"]
-    R --> N["NAVIGATOR<br/>Selective semantic retrieval"]
-    N --> M["Combine semantic + deterministic results"]
+    R --> N["NAVIGATOR<br/>Selective retrieval"]
+    N --> M["Combine results"]
     M --> S
     S --> V["BLOCK · ESCALATE · ALLOW"]
-    S --> L["Hash-chained vote ledger"]
+    S --> L["Hash-chained ledger"]
 ```
 
 **Routing matters:** VAULT, EXECUTOR, and CHANNEL deterministic checks run on every request. Eligible confident deterministic blocks can short-circuit the expensive synchronous path. Otherwise COMPASS runs and the semantic router decides whether NAVIGATOR retrieval is needed. If no router description crosses the configured threshold, the router falls back to all configured names; the live semantic retrieval path is NAVIGATOR. The Speaker combines the results and trajectory risk.
