@@ -1,16 +1,41 @@
 # Kavach
 
-Kavach is a tool-call security monitor. This repository preserves the original `Ishani018/Kavach` minister implementations, routing behavior, Speaker mechanism, support modules, and tests.
+Kavach is a tool-call security monitor. This repository preserves the original `Ishani018/Kavach` implementation, including the ministers, selective routing, Speaker mechanism, supporting modules, and tests.
 
-## Start here
+## How it works
 
-- **Want to understand the whole pipeline?** Read [`ARCHITECTURE.md`](ARCHITECTURE.md).
-- **Want the final decision logic?** Open [`parliament/speaker.py`](parliament/speaker.py) and find `combine_verdicts()`.
-- **Want VAULT or EXECUTOR?** Open [`parliament/prefilters.py`](parliament/prefilters.py) and find `check_vault()` or `check_executor()`.
-- **Want CHANNEL?** Open [`parliament/channel_taint.py`](parliament/channel_taint.py) and find `check_channel_taint()`.
-- **Want NAVIGATOR's semantic retrieval?** Open [`parliament/ministers.py`](parliament/ministers.py).
-- **Want routing, COMPASS, or the HTTP request flow?** Open [`parliament/server.py`](parliament/server.py).
-- **Want session risk/history?** Open [`parliament/trajectory.py`](parliament/trajectory.py).
+```mermaid
+flowchart TD
+    A["Incoming tool call"] --> B["TRAJECTORY<br/>Score session history"]
+    B --> C["Deterministic checks<br/>VAULT · EXECUTOR · CHANNEL"]
+    C --> D{"Eligible confident<br/>BLOCK?"}
+    D -- Yes --> S["Speaker"]
+    D -- No --> E["COMPASS<br/>Compare with user intent"]
+    E --> R["Semantic router"]
+    R --> N["NAVIGATOR<br/>Selective semantic retrieval"]
+    N --> M["Combine semantic + deterministic results"]
+    M --> S
+    S --> V["BLOCK · ESCALATE · ALLOW"]
+    S --> L["Hash-chained vote ledger"]
+```
+
+**Routing matters:** VAULT, EXECUTOR, and CHANNEL deterministic checks run on every request. Eligible confident deterministic blocks can short-circuit the expensive synchronous path. Otherwise COMPASS runs and the semantic router decides whether NAVIGATOR retrieval is needed. If no router description crosses the configured threshold, the router falls back to all configured names; the live semantic retrieval path is NAVIGATOR. The Speaker combines the results and trajectory risk.
+
+## Where to open the code
+
+| Component | File / function |
+|---|---|
+| VAULT | [`parliament/prefilters.py`](parliament/prefilters.py) → `check_vault()` |
+| EXECUTOR | [`parliament/prefilters.py`](parliament/prefilters.py) → `check_executor()` |
+| CHANNEL | [`parliament/channel_taint.py`](parliament/channel_taint.py) → `check_channel_taint()` |
+| NAVIGATOR retrieval | [`parliament/ministers.py`](parliament/ministers.py) |
+| Routing + COMPASS + request flow | [`parliament/server.py`](parliament/server.py) |
+| TRAJECTORY | [`parliament/trajectory.py`](parliament/trajectory.py) |
+| Speaker decision | [`parliament/speaker.py`](parliament/speaker.py) → `combine_verdicts()` |
+| Parsing helpers | [`parliament/ast_parse.py`](parliament/ast_parse.py), [`parliament/struct_parse.py`](parliament/struct_parse.py) |
+| Provenance / denial protection | [`parliament/provenance.py`](parliament/provenance.py), [`parliament/denial_shield.py`](parliament/denial_shield.py) |
+
+The original modules stay in their existing locations. VAULT and EXECUTOR share `prefilters.py); CHANNEL and provenance tracking share `channel_taint.py`. This README maps the existing implementation rather than duplicating or simplifying its logic.
 
 ## Run
 
@@ -21,7 +46,7 @@ pip install -r requirements.txt
 python -m uvicorn parliament.server:app --host 127.0.0.1 --port 8088
 ```
 
-The live service also needs the configured embedding model and ChromaDB collections. Installing dependencies alone does not create those external resources.
+The live service also needs the configured embedding model and ChromaDB collections. Installing dependencies alone does not create those resources.
 
 ## Tests
 
@@ -29,4 +54,4 @@ The live service also needs the configured embedding model and ChromaDB collecti
 python -m pytest parliament/test_*.py
 ```
 
-Original implementation modules are intentionally kept in their existing locations. The architecture is documented around the code rather than replacing working code with new stubs or duplicating detector logic.
+These are the original focused tests; their presence here does not imply that the suite or a fully configured live service has been run and verified.
