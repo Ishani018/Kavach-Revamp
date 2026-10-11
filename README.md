@@ -1,52 +1,53 @@
 # Kavach
 
-Kavach is a tool-call security monitor. This repository preserves the original `Ishani018/Kavach` implementation, including the ministers, selective routing, Speaker mechanism, supporting modules, and tests.
+Kavach is a tool-call security monitor. This repository is the **Revamp working copy**; the original `Ishani018/Kavach` repository remains the source of truth and is not modified here.
 
-## How it works
+## Current request path
 
 ```mermaid
 flowchart LR
-    A["Incoming tool call"] --> B["TRAJECTORY"]
-    B --> C["VAULT · EXECUTOR · CHANNEL<br/>Deterministic checks"]
-    C --> D{"Confident eligible<br/>BLOCK?"}
-    D -- Yes --> S["Speaker"]
-    D -- No --> E["COMPASS"]
-    E --> R["Semantic router"]
-    R --> N["NAVIGATOR<br/>Selective retrieval"]
-    N --> M["Combine results"]
-    M --> S
+    A["Incoming tool call"] --> B["Deterministic checks"]
+    B --> C{"Eligible confident BLOCK?"}
+    C -- Yes --> S["Speaker"]
+    C -- No --> D["COMPASS + router"]
+    D --> N["NAVIGATOR retrieval"]
+    N --> S
     S --> V["BLOCK · ESCALATE · ALLOW"]
-    S --> L["Hash-chained ledger"]
+    S --> L["Decision / ledger"]
 ```
 
-**Routing matters:** VAULT, EXECUTOR, and CHANNEL deterministic checks run on every request. Eligible confident deterministic blocks can short-circuit the expensive synchronous path. Otherwise COMPASS runs and the semantic router decides whether NAVIGATOR retrieval is needed. If no router description crosses the configured threshold, the router falls back to all configured names; the live semantic retrieval path is NAVIGATOR. The Speaker combines the results and trajectory risk.
+VAULT and EXECUTOR checks live in `parliament/prefilters.py`; CHANNEL checks live in `parliament/channel_taint.py`; NAVIGATOR retrieval lives in `parliament/ministers.py`. The existing server also uses COMPASS, trajectory risk, and the Speaker. Those orchestration components have **not** been redesigned in this cleanup pass.
 
-## Where to open the code
+## Core files
 
-| Component | File / function |
+| Responsibility | File |
 |---|---|
-| VAULT | [`parliament/prefilters.py`](parliament/prefilters.py) → `check_vault()` |
-| EXECUTOR | [`parliament/prefilters.py`](parliament/prefilters.py) → `check_executor()` |
-| CHANNEL | [`parliament/channel_taint.py`](parliament/channel_taint.py) → `check_channel_taint()` |
-| NAVIGATOR retrieval | [`parliament/ministers.py`](parliament/ministers.py) |
-| Routing + COMPASS + request flow | [`parliament/server.py`](parliament/server.py) |
-| TRAJECTORY | [`parliament/trajectory.py`](parliament/trajectory.py) |
-| Speaker decision | [`parliament/speaker.py`](parliament/speaker.py) → `combine_verdicts()` |
-| Parsing helpers | [`parliament/ast_parse.py`](parliament/ast_parse.py), [`parliament/struct_parse.py`](parliament/struct_parse.py) |
-| Provenance / denial protection | [`parliament/provenance.py`](parliament/provenance.py), [`parliament/denial_shield.py`](parliament/denial_shield.py) |
+| HTTP service, routing, orchestration | `parliament/server.py` |
+| NAVIGATOR retrieval | `parliament/ministers.py` |
+| VAULT + EXECUTOR deterministic checks | `parliament/prefilters.py` |
+| CHANNEL taint checks | `parliament/channel_taint.py` |
+| Provenance helpers | `parliament/provenance.py` |
+| AST parsing | `parliament/ast_parse.py` |
+| Structural parsing and fallback helpers | `parliament/struct_parse.py` |
+| Existing Speaker policy | `parliament/speaker.py` |
+| Existing trajectory implementation | `parliament/trajectory.py` |
+| Runtime thresholds and model settings | `parliament/config.yaml` |
+| Router descriptions | `kavach_router_config.json` |
 
-The original modules stay in their existing locations. VAULT and EXECUTOR share `prefilters.py); CHANNEL and provenance tracking share `channel_taint.py`. This README maps the existing implementation rather than duplicating or simplifying its logic.
+VAULT, EXECUTOR, CHANNEL, and NAVIGATOR implementation files have been preserved rather than rewritten. The cleanup removed unconnected experimental modules from this working copy: the standalone LLM tie-breaker, alternate Bayesian Speaker, NAVIGATOR auth-flow experiment and its standalone test, and the unused denial-shield module. They remain recoverable from the original repository/history if later needed.
 
 ## Run
 
-The FastAPI service entry point is `parliament.server:app`:
+Use Python 3.11 and install dependencies:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python -m uvicorn parliament.server:app --host 127.0.0.1 --port 8088
 ```
 
-The live service also needs the configured embedding model and ChromaDB collections. Installing dependencies alone does not create those resources.
+The live service also requires the configured embedding model and ChromaDB collections; installing packages alone does not create those resources.
 
 ## Tests
 
@@ -54,4 +55,4 @@ The live service also needs the configured embedding model and ChromaDB collecti
 python -m pytest parliament/test_*.py
 ```
 
-These are the original focused tests; their presence here does not imply that the suite or a fully configured live service has been run and verified.
+This command describes the focused test suite available in the repository; it does not claim that the suite or a fully configured service has been run in this environment.
