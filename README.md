@@ -1,41 +1,32 @@
 # Kavach
 
-A small, runtime-agnostic monitor for proposed AI-agent tool actions.
+**A small set of security ministers, one Speaker.**
 
-Kavach receives a structured event describing an action, evaluates explicit security policies, and returns a decision before the host runtime executes the action. The core does not run the agent, choose its goals, or assume that every runtime exposes the same context.
-
-## Status
-
-**Scaffold only.** The repository defines the intended boundaries; no detector or runtime integration is claimed to be production-ready yet.
-
-## Architecture
+Each minister checks one kind of risk in a proposed tool action. The Speaker collects their votes and produces one final verdict. That's the whole architecture.
 
 ```text
-Agent runtime
-    │
-    ▼
-Runtime adapter
-    │  versioned ActionEvent
-    ▼
-Kavach core
-    ├── schema validation
-    ├── deterministic policy checks
-    └── decision: ALLOW / BLOCK / REVIEW / INDETERMINATE
-    │
-    ├──────────────► Decision returned to adapter
-    └──────────────► Minimal audit record
+Tool action
+    ↓
+  Monitor
+    ↓
+ ┌────────── Ministers ──────────┐
+ │ Vault · Executor · Channel   │
+ │ Compass · Navigator · Trajectory
+ └──────────────┬────────────────┘
+                ↓ votes
+             Speaker
+                ↓
+     ALLOW / BLOCK / REVIEW / INDETERMINATE
 ```
 
-## Principles
+## Where to look
 
-- **Core first:** the policy engine has no dependency on a particular agent framework.
-- **Explicit visibility:** unavailable, omitted, redacted, and sanitized context are not treated as equivalent to observed values.
-- **Small and deterministic:** start with a small set of inspectable rules. No embeddings, vector database, LLM judge, or trajectory model in the core.
-- **Honest enforcement claims:** a verdict only prevents execution if the adapter can reliably intercept and enforce it.
-- **Test before expanding:** every policy needs malicious and benign examples.
+- `src/kavach/ministers/` — one small, readable file per minister.
+- `src/kavach/speaker.py` — the only place that combines votes.
+- `src/kavach/monitor.py` — calls the ministers and passes their votes to the Speaker.
+- `src/kavach/models.py` — the shared input, vote, and verdict types.
+- `tests/` — checks the Speaker's decision rules.
 
-## Development
+Each minister is intentionally a stub right now. Its job and extension point are visible, but no detection capability is claimed until it has implementation and tests.
 
-The first milestone is the event and decision contract, with tests. Detector implementations and adapters come later, after their interfaces and safety behavior are tested.
-
-See [SCOPE.md](SCOPE.md) for the initial boundary and non-goals.
+No agent framework, web server, database, embeddings, LLM judge, or orchestration layer in the core.
