@@ -43,7 +43,7 @@ Use Python compatible with the original project and install its dependencies:
 pip install -r requirements.txt
 ```
 
-The live FastAPI service is in `parliament/server.py`. Its runtime also expects the original model/corpus configuration and environment setup; installing the Python dependencies alone does not configure those external resources.
+The live FastAPI service is in `parliament/server.py`; its router descriptions are in [`kavach_router_config.json`](kavach_router_config.json). The service also expects the configured ChromaDB collections and embedding model to be available. Installing Python dependencies alone does not build or configure those external resources.
 
 ## Tests
 
