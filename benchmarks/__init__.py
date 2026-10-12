@@ -1,1 +1,0 @@
-"""Kavach benchmark harness."""

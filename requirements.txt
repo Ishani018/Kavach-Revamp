@@ -1,35 +1,14 @@
-# Kavach Parliament + benchmarks — Python dependencies
-# Tested against Python 3.11 on Ubuntu 24.04.
-#
-# Install with:
-#     pip install -r requirements.txt --break-system-packages
-# or in a venv:
-#     python -m venv .venv && source .venv/bin/activate
-#     pip install -r requirements.txt
-
-# ── Parliament server ──────────────────────────────────────────────────
+# Kavach MVP core. Tested on Python 3.9 (see README for versions actually used).
 fastapi>=0.110,<0.120
-uvicorn[standard]>=0.27,<0.35
+uvicorn>=0.27,<0.35
 pydantic>=2.5,<3.0
-pyyaml>=6.0,<7.0
-
-# ── Embedding + vector store ───────────────────────────────────────────
-# BGE model + tokenizer
+# VAULT/EXECUTOR: shell parsing for the AST-based checks
+bashlex>=0.18
+# NAVIGATOR: embeddings (BGE), vector store, lexical index
 sentence-transformers>=2.7,<4.0
-# transformers and torch are pulled in transitively; pinning lower bound
-# to avoid old versions whose mean-pooling defaults differ.
-torch>=2.1
-transformers>=4.40
-
 chromadb>=0.5,<0.7
-
-# ── Benchmark harness ──────────────────────────────────────────────────
-aiohttp>=3.9,<4.0
-pandas>=2.0,<3.0
+rank-bm25>=0.2.2
 numpy>=1.26,<2.5
-matplotlib>=3.8,<4.0
-
-# ── Dev / smoke testing ────────────────────────────────────────────────
-httpx>=0.27,<1.0   # used by smoke_test.py
+# Tests
 pytest>=8.0,<9.0
-rank-bm25>=0.2.2          # hybrid BM25+dense RRF retrieval (graceful fallback to dense if absent)
+httpx>=0.27,<1.0

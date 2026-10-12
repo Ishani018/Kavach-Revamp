@@ -1,9 +1,0 @@
-### F-3 verification — section5_macros.tex committed status
-branch=ishani/remove-repo-visualizer HEAD=0e4ba0c
---- git ls-files paper/tables/ (tracked files only) ---
-paper/tables/.gitignore
-paper/tables/.gitkeep
---- git check-ignore ---
-paper/tables/.gitignore:5:section5_macros.tex	paper/tables/section5_macros.tex
-paper/tables/.gitignore:4:tab_*.tex	paper/tables/tab_frontier.tex
-VERDICT: FALSE POSITIVE — macros are gitignored, not committed; cannot ship in repo.
