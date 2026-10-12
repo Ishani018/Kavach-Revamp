@@ -1,0 +1,160 @@
+{
+  "baseline_id": "navigator-baseline-v1",
+  "configuration": {
+    "bm25_tie_order": "np.argsort(scores)[::-1] over BM25 positions (ties ranked in reverse index order)",
+    "bm25_tokenizer_drops": [
+      "tool",
+      "args"
+    ],
+    "embed_model": "BAAI/bge-base-en-v1.5",
+    "gate_floor": 0.65,
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "rrf_k": 60,
+    "thresholds": {
+      "block": 0.7,
+      "grey": 0.5
+    },
+    "top_k": 10,
+    "wire_format_example": "tool:bash args:{\"command\": \"ls\"}"
+  },
+  "corpus_and_index": {
+    "bm25_corpus_size": 300,
+    "by_level": {
+      "L1_intent": 100,
+      "L2_mechanism": 100,
+      "L3_surface": 100
+    },
+    "collection_count": 300,
+    "doc_ids_sha256": "dd76890e03de5d24645efc4e84df92634fcf2ee5a5cf226585dd2b2d5291de4f",
+    "doc_texts_sha256": "02dd4d75dd343774bda43b2b05081c442445349211e220d0780f82d25b2072a2",
+    "documents": 300,
+    "embeddings_fingerprint": {
+      "method": "sha256 of float32 embeddings rounded to 5 decimals, documents sorted by id",
+      "sha256": "4175131364b31358a4fae11f9f5f271816856647808d1b656b1027c81763b5c5",
+      "shape": [
+        300,
+        768
+      ]
+    },
+    "patterns": 100
+  },
+  "data_policy": "Phase A reserved split never read. Diagnosis data has been inspected and is NOT held out. dev_* sets overlap with rule development.",
+  "diagnostic_results": {
+    "navigator_diagnosis_items.jsonl": "6fa28e2609b77196384958e5f4029b2cfca3391193be2e577064e054773b5186",
+    "navigator_diagnosis_results.json": "cd2ddddb9f4497eaa890cec5b2873adc2fc6ede2b005abb82edd572c99ee65ca"
+  },
+  "environment": {
+    "packages": {
+      "chroma-hnswlib": "0.7.6",
+      "chromadb": "0.6.3",
+      "numpy": "2.0.2",
+      "rank-bm25": "0.2.2",
+      "sentence-transformers": "3.4.1",
+      "tokenizers": "0.22.2",
+      "torch": "2.8.0",
+      "transformers": "4.57.6"
+    },
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.9.6"
+  },
+  "files": {
+    "navigator_baseline_docs.jsonl": "a8013d06b98329425c9d1808125e9367dd8757301fbf38dfa1ee50699521c662",
+    "navigator_baseline_items.jsonl": "ae4aad15163eb15cd996ff2a448221f12f516d6b9f3933c04eb2bbf9f1e2eb58"
+  },
+  "inputs": {
+    "evaluation_dataset_blobs": {
+      "evaluation/datasets/kavach_pb_attack/_kavach_pb_attack_checkpoint.json": "f22bd3dde686bf1e8a2b7f9d1ba0d18996d3d8af49f3ee0700a6051e5cde4034",
+      "evaluation/datasets/kavach_pb_bfcl_benign/_kavach_pb_bfcl_general_purpose_checkpoint.json": "b5948170da537436932c31a5de3f6b8b1aee8efbc25b93d17828b367a60bb092"
+    },
+    "ids_sha256": "0b10d796b05abc3a32dcae3ddc438e2d3e02383973218894c3c7255766e45b93",
+    "phase_a_files": {
+      "redcode_bash_items.jsonl": "607045c3d42deb2be643ac3e8eb4eb7b1deadd177d74d13739504de95aeea660",
+      "swe_agent_items.jsonl": "e6cbe5eb355ea03692b92b910687aec91dc638a2cfb061f6b3780a33c6b7950f",
+      "tldr_security_items.jsonl": "9ccd3790b3899c671e6119f31c0279053e7bceba20931e87904ca4ce37e0dda6"
+    },
+    "phase_a_manifest_sha256": "66a81873307e1ffa149eaf5fd7fee3d6209b7c8392e26188cb4d7c2792297572",
+    "phase_a_split": {
+      "diagnosis_percent": 60,
+      "salt": "phase-a-split-v1"
+    }
+  },
+  "model": {
+    "name": "BAAI/bge-base-en-v1.5",
+    "snapshot": "a5beb1e3e68b9ab74eb54cfd186867f64f240e1a",
+    "weights_file": "model.safetensors",
+    "weights_sha256_from_blob_name": "c7c1988aae201f80cf91a5dbbd5866409503b89dcaba877ca6dba7dd0a5167d7"
+  },
+  "mvp": {
+    "file_sha256": {
+      "kavach/data/kavach_corpus_v1.json": "851feed6129a8a9c444e3042fdc57e3ebe84759d8e2f7acd75da2dd1bd954c35",
+      "kavach/ministers/executor.py": "92f8deb2b6fd7b0bf8ebad4a6c6f51788a95267f12a9aeae4a9cce5b8af8d54f",
+      "kavach/ministers/navigator.py": "93d6574c048b7d13864e29fcd44293ed62b7dea975f46e18bf03088cc593323e",
+      "kavach/ministers/prefilters.py": "d421b971eb936bc5262b1d8ab2deb1a272bd3f935086151ac8c042b6da4161a6",
+      "kavach/ministers/retrieval.py": "964ea196018bfcdf66c1ef8519411dc5274c7766c2857e80d7e099b4609c8a0c",
+      "kavach/ministers/vault.py": "8b43a77bd069cd22cc0f05e6b89eb615d7a6250427b70fb23af5d5e06249d8ee",
+      "kavach/schemas.py": "9b9fc84908a1dfb335a457c8422883bbb2f97af299e741c026af12515e483eb7"
+    },
+    "git_head": "328bd83c6e38e65291c89875bdfd62882345a57b",
+    "note": "The working tree contains uncommitted work; the file hashes below are what was actually tested."
+  },
+  "status": "frozen_snapshot_of_current_behaviour_not_a_specification",
+  "summary": {
+    "by_set": {
+      "canary_doc": {
+        "n": 300,
+        "verdicts": {
+          "BLOCK": 290,
+          "ESCALATE": 10
+        }
+      },
+      "dev_attack_pb": {
+        "n": 519,
+        "verdicts": {
+          "ALLOW": 142,
+          "BLOCK": 15,
+          "ESCALATE": 362
+        }
+      },
+      "dev_benign_bfcl": {
+        "n": 793,
+        "verdicts": {
+          "ALLOW": 701,
+          "ESCALATE": 92
+        }
+      },
+      "diag_attack_redcode": {
+        "n": 277,
+        "verdicts": {
+          "ALLOW": 131,
+          "BLOCK": 13,
+          "ESCALATE": 133
+        }
+      },
+      "diag_benign_swe": {
+        "n": 86,
+        "verdicts": {
+          "ALLOW": 9,
+          "ESCALATE": 77
+        }
+      },
+      "diag_benign_tldr": {
+        "n": 120,
+        "verdicts": {
+          "ALLOW": 34,
+          "BLOCK": 2,
+          "ESCALATE": 84
+        }
+      },
+      "wrapper_probe": {
+        "n": 9,
+        "verdicts": {
+          "ALLOW": 2,
+          "ESCALATE": 7
+        }
+      }
+    },
+    "canary_docs_retrieving_own_pattern_at_or_above_grey": "299/300",
+    "replica_vs_real_mismatches": 0,
+    "test_sample_size": 140
+  }
+}

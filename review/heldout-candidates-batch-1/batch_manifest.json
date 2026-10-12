@@ -1,0 +1,50 @@
+{
+  "batch_id": "heldout-candidates-batch-1",
+  "do_not_use_for": "any detection, precision, recall, false-positive or accuracy claim, until labels and independence are reviewed",
+  "files": {
+    "review_items.jsonl": "849c606582524c633adb1f3006bee0babf857a2d2c5a1c7d3860bc4119d031f7",
+    "review_sheet.csv": "299fcc3b5f1557719cd0dbfc715f97573c0c3d52c3e2e5ded4d01d250cbd2a15",
+    "selection_ids.json": "0f8c12809178fba6539abede99d1120a5ce8d0182c5ecc0989876af3a352851f"
+  },
+  "held_out_status": "not_verified",
+  "in_evaluation_registry": false,
+  "item_id_scheme": "HC1-<position in the shuffled order>; the original id is in source_item_id",
+  "plan": "docs/heldout-dataset-plan.md",
+  "preparation_flag_counts": {
+    "MITRE Caldera stockpile plugin :: (none)": 24,
+    "MITRE Caldera stockpile plugin :: executor_chosen_among_several": 8,
+    "MITRE Caldera stockpile plugin :: multi_line": 58,
+    "MITRE Caldera stockpile plugin :: needs_payload_file": 30,
+    "MITRE Caldera stockpile plugin :: unresolved_runtime_variable": 51,
+    "MITRE Caldera stockpile plugin :: very_long": 1,
+    "tldr-pages :: (none)": 14,
+    "tldr-pages :: contains_ellipsis": 4,
+    "tldr-pages :: option_syntax_not_literal": 32,
+    "tldr-pages :: placeholders_replaced": 105,
+    "tldr-pages :: shell_unspecified": 111
+  },
+  "reviewer_blind": "reviewer-facing files contain no output of any detector",
+  "shuffle_seed": 20261012,
+  "sources": [
+    {
+      "commit": "996ec41cd1c5d1c7cc09e620fc55dabe5aefd9cc",
+      "label_meaning": "attack_emulation_action (unreviewed)",
+      "licence": "Apache-2.0",
+      "licence_path": "LICENSE",
+      "name": "MITRE Caldera stockpile plugin",
+      "repo": "https://github.com/mitre/stockpile",
+      "selected": 106
+    },
+    {
+      "commit": "3b04259a58d0bfecaa31c3179b3d349a81ef7893",
+      "label_meaning": "documented_legitimate_usage (unreviewed)",
+      "licence": "CC BY 4.0",
+      "licence_path": "LICENSE.md",
+      "name": "tldr-pages",
+      "repo": "https://github.com/tldr-pages/tldr",
+      "selected": 150
+    }
+  ],
+  "status": "candidate_unreviewed",
+  "total_items": 256
+}

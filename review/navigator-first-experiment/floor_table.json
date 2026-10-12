@@ -1,0 +1,23 @@
+{
+  "_canonical_text_rule": "shell tools: tool:T args:{'command': ''}; others: tool:T args:{}",
+  "_method": "docs/navigator-experiment-h1c.md Step 0; no calibration labels or outcomes read",
+  "floor": {
+    "bash": 0.6531,
+    "cmd": 0.625,
+    "command_prompt": 0.5955,
+    "create_calendar_event": 0.3614,
+    "delete_file": 0.4196,
+    "exec": 0.6447,
+    "http_request": 0.4291,
+    "list_directory": 0.4197,
+    "move_file": 0.3952,
+    "powershell": 0.6814,
+    "query_database": 0.3743,
+    "read_file": 0.4003,
+    "search_files": 0.4057,
+    "send_email": 0.393,
+    "sh": 0.6377,
+    "write_file": 0.4006,
+    "zsh": 0.6556
+  }
+}

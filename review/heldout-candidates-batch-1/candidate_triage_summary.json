@@ -1,0 +1,180 @@
+{
+  "baseline_cap": 25,
+  "by_source_and_decision": {
+    "MITRE Ca / exclude": 14,
+    "MITRE Ca / further_review": 11,
+    "MITRE Ca / retain": 81,
+    "tldr-pag / exclude": 117,
+    "tldr-pag / retain": 33
+  },
+  "channel_confound": 18,
+  "completeness": {
+    "complete": 83,
+    "not_a_security_relevant_command": 1,
+    "partial": 133,
+    "template_or_fragment": 39
+  },
+  "confidence": {
+    "high": 107,
+    "low": 53,
+    "medium": 96
+  },
+  "core_by_source_and_label": {
+    "MITRE Ca / likely_malicious": 39
+  },
+  "core_meaningful_for": {
+    "EXECUTOR": 39,
+    "NAVIGATOR": 29,
+    "VAULT": 6
+  },
+  "core_multi_minister": 33,
+  "decisions": {
+    "exclude": 131,
+    "further_review": 11,
+    "retain": 114
+  },
+  "dual_use_risk": {
+    "low": 188,
+    "medium": 68
+  },
+  "duplicates": {
+    "exact": 8,
+    "near": 3,
+    "none": 245
+  },
+  "further_review_items": 11,
+  "input_sha256": {
+    "review_items.jsonl": "849c606582524c633adb1f3006bee0babf857a2d2c5a1c7d3860bc4119d031f7"
+  },
+  "label_concerns": 16,
+  "minister_scope_techniques": {
+    "EXECUTOR": [
+      "T1003",
+      "T1027",
+      "T1053",
+      "T1055",
+      "T1059",
+      "T1098",
+      "T1105",
+      "T1176",
+      "T1185",
+      "T1195",
+      "T1197",
+      "T1218",
+      "T1543",
+      "T1546",
+      "T1547",
+      "T1548",
+      "T1550",
+      "T1574",
+      "T1609",
+      "T1610",
+      "T1611"
+    ],
+    "NAVIGATOR": [
+      "T1014",
+      "T1018",
+      "T1020",
+      "T1021",
+      "T1027",
+      "T1036",
+      "T1046",
+      "T1053",
+      "T1055",
+      "T1056",
+      "T1057",
+      "T1059",
+      "T1069",
+      "T1070",
+      "T1074",
+      "T1078",
+      "T1082",
+      "T1083",
+      "T1087",
+      "T1098",
+      "T1110",
+      "T1114",
+      "T1125",
+      "T1136",
+      "T1217",
+      "T1490",
+      "T1497",
+      "T1518",
+      "T1548",
+      "T1552",
+      "T1560",
+      "T1562",
+      "T1565",
+      "T1574",
+      "T1580",
+      "T1611",
+      "T1613"
+    ],
+    "VAULT": [
+      "T1003",
+      "T1048",
+      "T1528",
+      "T1539",
+      "T1552",
+      "T1555",
+      "T1558",
+      "T1563"
+    ]
+  },
+  "minister_tests": {
+    "CHANNEL": {
+      "not_testable_standalone": 256
+    },
+    "EXECUTOR": {
+      "attack_in_scope": 43,
+      "dual_use_in_scope": 34,
+      "not_applicable": 179
+    },
+    "NAVIGATOR": {
+      "attack_in_scope": 33,
+      "baseline_negative": 105,
+      "dual_use_in_scope": 53,
+      "not_applicable": 65
+    },
+    "VAULT": {
+      "attack_in_scope": 6,
+      "dual_use_in_scope": 16,
+      "not_applicable": 234
+    }
+  },
+  "near_duplicate_jaccard": 0.9,
+  "pipeline_version": "1.0",
+  "proposed_label": {
+    "MITRE Ca / dual_use": 63,
+    "MITRE Ca / likely_malicious": 43,
+    "tldr-pag / dual_use": 9,
+    "tldr-pag / likely_benign": 141
+  },
+  "relevance": {
+    "high": 43,
+    "low": 112,
+    "medium": 65,
+    "none": 36
+  },
+  "rules_fired": {
+    "K1": 39,
+    "K2": 25,
+    "K3": 50,
+    "R1": 11,
+    "X1": 11,
+    "X2": 39,
+    "X3": 1,
+    "X4": 80
+  },
+  "source_evidence_insufficient": 71,
+  "spot_check_items": 41,
+  "spot_check_seed": 20261014,
+  "status": "automated_proposal_not_verified",
+  "tiers": {
+    "None": 142,
+    "baseline_control": 25,
+    "core_definite_label": 39,
+    "dual_use_stress": 50
+  },
+  "total": 256
+}

@@ -1,0 +1,48 @@
+{
+  "baseline_navigator_verdicts": {
+    "attack/ALLOW": 314,
+    "attack/BLOCK": 34,
+    "attack/ESCALATE": 580,
+    "benign/ALLOW": 845,
+    "benign/BLOCK": 3,
+    "benign/ESCALATE": 446
+  },
+  "by_contamination": {
+    "development": 1492,
+    "diagnosis_split": 483,
+    "pilot_seen": 247
+  },
+  "by_role": {
+    "attack": 928,
+    "benign": 1294
+  },
+  "by_set": {
+    "atriumos": 28,
+    "batch1_caldera": 98,
+    "batch1_tldr": 149,
+    "benign_traces": 90,
+    "kavach_pb_attack": 519,
+    "kavach_pb_bfcl_benign": 793,
+    "openclaw_native": 30,
+    "phase_a_redcode": 277,
+    "phase_a_swe": 86,
+    "phase_a_tldr": 120,
+    "real_benign_sessions": 32
+  },
+  "by_shape": {
+    "attack/non_shell": 85,
+    "attack/shell": 843,
+    "benign/non_shell": 865,
+    "benign/shell": 429
+  },
+  "contamination_meanings": {
+    "development": "overlaps rule or corpus development (documented), or hand-written by the project",
+    "diagnosis_split": "inspected: used to diagnose NAVIGATOR (Phase A diagnosis split)",
+    "pilot_seen": "inspected: the full MVP was run on these in the test-suite roadmap pilot"
+  },
+  "duplicates_merged": 44,
+  "file_sha256": "7f6ce0e2a1a393f6407f9cc95b15cafe212892e8a0226ba44703ca472115ac29",
+  "items": 2222,
+  "reserved_split": "not read for any result",
+  "status": "calibration_set_for_a_manipulation_check_not_independent_not_held_out"
+}

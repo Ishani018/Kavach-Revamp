@@ -1,0 +1,385 @@
+{
+  "batch_id": "phase-a-candidates",
+  "build_version": "1.0",
+  "config": {
+    "near_duplicate_vs_held_data": 0.8,
+    "near_duplicate_within_source": 0.9,
+    "split_diagnosis_percent": 60,
+    "split_salt": "phase-a-split-v1",
+    "swe_builtins": [
+      "create",
+      "edit",
+      "find_file",
+      "goto",
+      "open",
+      "openurl",
+      "scroll_down",
+      "scroll_up",
+      "search_dir",
+      "search_file",
+      "submit"
+    ],
+    "swe_offsets": [
+      0,
+      8000,
+      16000,
+      24000,
+      32000,
+      40000,
+      48000,
+      56000,
+      64000,
+      72000
+    ],
+    "swe_window": 10,
+    "tldr_families": {
+      "credentials_keys": {
+        "names": [
+          "gpg",
+          "gpg2",
+          "ssh-keygen",
+          "ssh-add",
+          "ssh-agent",
+          "ssh-copy-id",
+          "openssl",
+          "age",
+          "pass",
+          "sops",
+          "ansible-vault",
+          "htpasswd",
+          "passwd",
+          "chpasswd",
+          "keytool",
+          "security",
+          "op",
+          "vault",
+          "bw",
+          "lpass",
+          "certbot",
+          "step",
+          "keyctl",
+          "kinit"
+        ],
+        "prefixes": [
+          "aws-secretsmanager",
+          "aws-sts",
+          "aws-iam",
+          "git-credential",
+          "gh-auth",
+          "gpg-",
+          "openssl-",
+          "ssh-"
+        ],
+        "quota": 40
+      },
+      "destructive_storage": {
+        "names": [
+          "rm",
+          "dd",
+          "shred",
+          "mkfs",
+          "wipefs",
+          "fdisk",
+          "parted",
+          "truncate",
+          "srm",
+          "cryptsetup",
+          "mount",
+          "umount",
+          "losetup",
+          "sgdisk",
+          "badblocks",
+          "rmdir",
+          "unlink"
+        ],
+        "prefixes": [
+          "mkfs."
+        ],
+        "quota": 25
+      },
+      "logging_defense": {
+        "names": [
+          "journalctl",
+          "logrotate",
+          "auditctl",
+          "ausearch",
+          "iptables",
+          "ufw",
+          "firewall-cmd",
+          "nft",
+          "fail2ban-client",
+          "setenforce",
+          "getenforce",
+          "sestatus",
+          "aa-status",
+          "apparmor_parser",
+          "history",
+          "logger",
+          "dmesg"
+        ],
+        "prefixes": [],
+        "quota": 20
+      },
+      "network_transfer": {
+        "names": [
+          "curl",
+          "wget",
+          "scp",
+          "rsync",
+          "sftp",
+          "ftp",
+          "nc",
+          "ncat",
+          "socat",
+          "ssh",
+          "telnet",
+          "netcat",
+          "aria2c",
+          "rclone",
+          "mosh",
+          "tftp",
+          "http",
+          "xh",
+          "lftp",
+          "smbclient",
+          "mc",
+          "s3cmd",
+          "gsutil"
+        ],
+        "prefixes": [
+          "aws-s3"
+        ],
+        "quota": 40
+      },
+      "privilege_exec": {
+        "names": [
+          "sudo",
+          "su",
+          "doas",
+          "chmod",
+          "chown",
+          "chgrp",
+          "setcap",
+          "getcap",
+          "visudo",
+          "systemctl",
+          "service",
+          "crontab",
+          "at",
+          "launchctl",
+          "nohup",
+          "bash",
+          "sh",
+          "zsh",
+          "xargs",
+          "env",
+          "nsenter",
+          "unshare",
+          "chroot",
+          "strace",
+          "ltrace",
+          "gdb",
+          "docker",
+          "podman",
+          "kubectl",
+          "eval",
+          "exec",
+          "watch",
+          "timeout"
+        ],
+        "prefixes": [
+          "docker-",
+          "podman-",
+          "kubectl-",
+          "systemctl-"
+        ],
+        "quota": 45
+      },
+      "recon_sniff": {
+        "names": [
+          "nmap",
+          "masscan",
+          "tcpdump",
+          "tshark",
+          "dig",
+          "nslookup",
+          "host",
+          "whois",
+          "traceroute",
+          "mtr",
+          "arp",
+          "netstat",
+          "ss",
+          "lsof",
+          "ip",
+          "ifconfig",
+          "ngrep",
+          "nikto",
+          "whatweb",
+          "ping",
+          "fping",
+          "arp-scan",
+          "nbtscan",
+          "enum4linux",
+          "snmpwalk"
+        ],
+        "prefixes": [],
+        "quota": 30
+      }
+    },
+    "tldr_platforms": [
+      "common",
+      "linux",
+      "osx"
+    ],
+    "tldr_seed": 20261015
+  },
+  "do_not_use_for": "any detection, precision, recall, false-positive or accuracy claim",
+  "executed_any_example": false,
+  "files": {
+    "phase_a_hints.jsonl": "35fe90f90c5095b766b2f6e354986686c9c2b4df5c731b60cf0cc6ff9f4f2296",
+    "redcode_bash_items.jsonl": "607045c3d42deb2be643ac3e8eb4eb7b1deadd177d74d13739504de95aeea660",
+    "swe_agent_excluded.jsonl": "1fa7a937b902db7097c1c2cc62f1d55b7513e48590b0e649e6c73a3e5cb92527",
+    "swe_agent_items.jsonl": "e6cbe5eb355ea03692b92b910687aec91dc638a2cfb061f6b3780a33c6b7950f",
+    "tldr_excluded_from_sample.jsonl": "ca8f9a4422056e885dce8ee781ee41b656d18105cf01cb556522f06cc986fbbe",
+    "tldr_security_items.jsonl": "9ccd3790b3899c671e6119f31c0279053e7bceba20931e87904ca4ce37e0dda6"
+  },
+  "held_out_status": "not_verified",
+  "in_evaluation_registry": false,
+  "overlap_reference": {
+    "by_source": {
+      "atriumos": 73,
+      "batch1": 256,
+      "benign_v0": 118,
+      "corpus_technical": 600,
+      "corpus_v1": 1206,
+      "kavach_pb_attack": 519,
+      "kavach_pb_bfcl": 2292,
+      "openclaw": 33,
+      "real_benign": 126,
+      "training_pairs": 10360
+    },
+    "extra_reference_used": true,
+    "strings": 15583
+  },
+  "ran_kavach_mvp": false,
+  "sources": [
+    {
+      "commit": "c84b6db88fd8bd258e29f12e692ccfd4287a454d",
+      "licence": "MIT",
+      "licence_path": "LICENSE",
+      "name": "RedCode-Exec (bash)",
+      "repo": "https://github.com/AI-secure/RedCode"
+    },
+    {
+      "commit": "3b04259a58d0bfecaa31c3179b3d349a81ef7893",
+      "licence": "CC BY 4.0",
+      "licence_path": "LICENSE.md",
+      "name": "tldr-pages",
+      "repo": "https://github.com/tldr-pages/tldr"
+    },
+    {
+      "commit": "68195a1450865274106246d0d0296a1d6807b88e",
+      "licence": "CC BY 4.0 (cc-by-4.0 per the dataset card)",
+      "licence_path": "README.md",
+      "name": "nebius/SWE-agent-trajectories",
+      "repo": "https://huggingface.co/datasets/nebius/SWE-agent-trajectories"
+    }
+  ],
+  "stats": {
+    "redcode": {
+      "duplicates_in_source": {
+        "exact": 2,
+        "near": 119,
+        "none": 479
+      },
+      "flags": {
+        "bashlex_cannot_parse": 218,
+        "depends_on_filesystem_state": 243,
+        "depends_on_local_service": 62,
+        "duplicate_in_source": 121,
+        "has_shebang": 570,
+        "multi_line": 570
+      },
+      "items": 600,
+      "overlap_with_data_we_hold": {
+        "none": 600
+      },
+      "scenarios": 20,
+      "split": {
+        "diagnosis": 329,
+        "reserved": 271
+      },
+      "uncertain_label": 388
+    },
+    "swe": {
+      "duplicates_in_source": {
+        "exact": 545,
+        "near": 102,
+        "none": 139
+      },
+      "excluded_commands": {
+        "agent_builtin_command": 1731,
+        "multi_line_or_long": 1
+      },
+      "flags": {
+        "bashlex_cannot_parse": 106,
+        "contains_url": 12,
+        "depends_on_working_directory": 9,
+        "duplicate_in_source": 647,
+        "malformed_builtin_like": 40
+      },
+      "items": 786,
+      "overlap_with_data_we_hold": {
+        "none": 786
+      },
+      "split": {
+        "diagnosis": 419,
+        "reserved": 367
+      },
+      "trajectories_sampled": 100,
+      "uncertain_label": 11
+    },
+    "tldr": {
+      "duplicates_in_source": {
+        "exact": 2,
+        "none": 198
+      },
+      "excluded_notation_or_unparseable": 623,
+      "flags": {
+        "duplicate_in_source": 2,
+        "overlaps_data_we_hold": 3,
+        "placeholders_replaced": 146,
+        "shell_unspecified": 146
+      },
+      "items": 200,
+      "overlap_with_data_we_hold": {
+        "exact": 3,
+        "none": 197
+      },
+      "pool_before_sampling": 1899,
+      "pool_by_family": {
+        "credentials_keys": 237,
+        "destructive_storage": 140,
+        "logging_defense": 106,
+        "network_transfer": 208,
+        "privilege_exec": 1040,
+        "recon_sniff": 168
+      },
+      "sample_by_family": {
+        "credentials_keys": 40,
+        "destructive_storage": 25,
+        "logging_defense": 20,
+        "network_transfer": 40,
+        "privilege_exec": 45,
+        "recon_sniff": 30
+      },
+      "split": {
+        "diagnosis": 121,
+        "reserved": 79
+      },
+      "uncertain_label": 11
+    }
+  },
+  "status": "candidate_unreviewed"
+}

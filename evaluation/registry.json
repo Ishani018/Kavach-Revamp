@@ -1,0 +1,752 @@
+{
+  "schema_version": 1,
+  "note": "Curated metadata. Counts, duplicates and overlaps are computed by evaluation/build_manifest.py into evaluation/manifest.json. 'unknown' means unknown; nothing here has been independently verified.",
+  "pinned_source": {
+    "git_ref": "main",
+    "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69"
+  },
+  "role_definitions": {
+    "unit_test_fixture": "Data created only to exercise code paths in unit tests.",
+    "development_tuning": "Data used (or documented as usable) while writing or tuning rules, the corpus or thresholds, or written by the same authors with knowledge of the detectors. Results on it are smoke tests.",
+    "historical_benchmark_result": "Recorded outputs of earlier pipelines. Not input data; not evidence about the MVP.",
+    "held_out_evaluation": "Data verified never to have been used for rule, corpus or threshold development. NO dataset currently qualifies."
+  },
+  "datasets": [
+    {
+      "id": "kavach_pb_attack",
+      "title": "Kavach-PB attack cases (Atomic Red Team + GTFOBins converted to tool calls)",
+      "path": "evaluation/datasets/kavach_pb_attack/_kavach_pb_attack_checkpoint.json",
+      "format": "pb_checkpoint",
+      "label": "attack",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "519 malicious command-style tool calls used to measure VAULT/EXECUTOR hit rates during rule development.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/_kavach_pb_attack_checkpoint.json",
+        "git_blob_sha1": "d1b1debbaf41cecfbbcd4339552d3031e29aa138"
+      },
+      "provenance": {
+        "documented_origin": "456 Atomic Red Team and 63 GTFOBins items converted into `tool:NAME args:{json}` strings by the project's own scripts (eval/naive_baseline/README.md on main; kavach_eval/reference_corpus_v0 on main). The conversion scripts have not been independently checked.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "eval/agentharm_independent/README.md (main) states the VAULT/EXECUTOR rules were authored by mining detection misses on these corpora; the 519 call strings are identical to training_pairs_*_capped.jsonl (measured in docs/test-data-inventory.md)."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "Every row is malicious by construction (derived from attack-technique sources). Not human-verified. The file also holds `target_ministers` labels derived from the Kavach corpus and verdicts from the pre-MVP pipeline; both are ignored by the runner.",
+      "known_issues": [
+        "Near-duplicates exist (see manifest).",
+        "Mapping of cases to ministers depends on the system under test.",
+        "Contains verdicts from an older pipeline; not MVP results."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Bare tool calls. No user instruction, tool output or account email in the file."
+      }
+    },
+    {
+      "id": "kavach_pb_bfcl_benign",
+      "title": "BFCL general-purpose benign function calls",
+      "path": "evaluation/datasets/kavach_pb_bfcl_benign/_kavach_pb_bfcl_general_purpose_checkpoint.json",
+      "format": "pb_checkpoint",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "793 generic function-calling examples used as a zero-hard-block false-positive gate during development.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/_kavach_pb_bfcl_general_purpose_checkpoint.json",
+        "git_blob_sha1": "70d2c46d214ee82500dafca879ed0f865f6226b0"
+      },
+      "provenance": {
+        "documented_origin": "Berkeley Function-Calling Leaderboard items (`bfcl_simple_*`, `bfcl_live_simple` per kavach_eval/reference_corpus_v0 on main) rendered as tool calls by the project. No URL, version or licence recorded.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "benchmarks/KAVACH_PB_VAULT_EXECUTOR_UPGRADE.md (main) uses it as the benign false-positive gate when evaluating rule layers; identical to training_pairs_bfcl_v0.jsonl negatives (measured)."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "All rows treated as benign. Generic function calls, not agent-security traffic.",
+      "known_issues": [
+        "Not representative of the tool surfaces attacks target."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Bare tool calls."
+      }
+    },
+    {
+      "id": "benign_v0_agent_shaped",
+      "title": "benign_v0: agent-shaped benign calls from one banking run",
+      "path": "evaluation/datasets/benign_v0_agent_shaped/_kavach_pb_benign_v0_agent_shaped_checkpoint.json",
+      "format": "pb_checkpoint",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "55 real tool calls (NotInject-style) from a qwen2.5:7b AgentDojo banking run, used to check false positives.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/_kavach_pb_benign_v0_agent_shaped_checkpoint.json",
+        "git_blob_sha1": "1921c916a8e777e3e6854ccd655dbdcd2d185286"
+      },
+      "provenance": {
+        "documented_origin": "parliament/benign_test_set/README.md (main): calls copied verbatim from one live qwen2.5:7b run on AgentDojo's banking suite; 9 'clean' + 46 'goal_as_task' rows.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "PROPOSED_vault_executor_expansion.py docstring (main): candidate rules were validated against 'benign_v0 55 + real_benign_trajectories + benign_probe 25' with zero tolerance."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "Benign by construction (the user's own task requested the action). 'goal_as_task' rows reuse argument values that are malicious in AgentDojo's paired attack runs.",
+      "known_issues": [
+        "Only 32 unique calls out of 55 rows.",
+        "Single domain (banking), single model."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "This checkpoint copy keeps only the call text. The same 55 cases WITH their user_task_text are registered as benign_v0_with_context."
+      }
+    },
+    {
+      "id": "benign_v0_with_context",
+      "title": "benign_v0 rows with their user task text (same 55 cases as benign_v0_agent_shaped)",
+      "path": "evaluation/datasets/benign_v0_with_context/benign_v0.json",
+      "format": "benign_v0_rows_json",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "The original benign_v0 file. Identical cases to benign_v0_agent_shaped (same order, same call text, checked), but carries user_task_text so CHANNEL can be given the user's instruction.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "parliament/benign_test_set/benign_v0.json",
+        "git_blob_sha1": "5d221fbb23520a2b10b8089bcbd55e307f81f5ba"
+      },
+      "provenance": {
+        "documented_origin": "parliament/benign_test_set/README.md (main): built by build_v0.py from one live qwen2.5:7b AgentDojo banking run; 9 'clean' + 46 'goal_as_task' rows.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Same as benign_v0_agent_shaped: validation set for candidate VAULT/EXECUTOR rules."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "Benign by construction. `goal_as_task` rows reuse argument values that are malicious in AgentDojo's paired attack runs; only the user task text distinguishes them.",
+      "known_issues": [
+        "Duplicates benign_v0_agent_shaped on purpose: the pair lets you see the effect of supplying user_instruction. Do not add the two together.",
+        "32 unique calls out of 55 rows."
+      ],
+      "context": {
+        "fields_available": [
+          "user_instruction"
+        ],
+        "source_mapping": {
+          "user_instruction": "row.user_task_text"
+        },
+        "present_but_not_mapped": [
+          "bucket",
+          "why_legitimate (author annotations about the label; deliberately not sent)",
+          "source_file"
+        ],
+        "notes": "No tool outputs or account_email in the file."
+      }
+    },
+    {
+      "id": "real_benign_sessions",
+      "title": "22 real benign banking sessions (same run as benign_v0)",
+      "path": "tests/data/real_benign_trajectories.json",
+      "format": "benign_sessions_json",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": true,
+      "used_by_tests": [
+        "tests/test_channel_taint.py"
+      ],
+      "purpose": "Session-level benign sequences for checking CHANNEL does not taint or block ordinary banking tasks.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "parliament/benign_test_set/real_benign_trajectories.json",
+        "git_blob_sha1": "5b0b75cd6678c35cc2c82b8be3b6eb033a833c25"
+      },
+      "provenance": {
+        "documented_origin": "parliament/benign_test_set/README.md (main): raw extraction of every qwen2.5:7b tool call from one live AgentDojo banking run.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Same calls as benign_v0 (32 unique calls across 64); used to validate CHANNEL provenance and VAULT/EXECUTOR candidate rules."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "Benign sessions. Kept in tests/data (already part of the MVP unit tests); not duplicated.",
+      "known_issues": [
+        "Single suite (banking). Zero benign coverage elsewhere (VALIDATION_PROTOCOL.md on main).",
+        "No tool outputs or user instruction are supplied to CHANNEL by the runner."
+      ],
+      "context": {
+        "fields_available": [
+          "user_instruction",
+          "tool_output"
+        ],
+        "source_mapping": {
+          "user_instruction": "session.user_task_text",
+          "tool_output": "call.tool_output"
+        },
+        "present_but_not_mapped": [],
+        "notes": "2 of 64 calls have a null tool_output and are sent without one. No account_email exists in this banking data."
+      }
+    },
+    {
+      "id": "atriumos",
+      "title": "AtriumOS author-written generalization audit",
+      "path": "evaluation/datasets/atriumos/atriumos_scenarios.jsonl",
+      "format": "atriumos_jsonl",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "36 paired scenarios (18 attack / 18 benign) with invented tool vocabulary, meant to test generalization beyond known rule keywords.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/data/atriumos_scenarios.jsonl",
+        "git_blob_sha1": "068c0bdcd9d8d54bbd0e55fbbbd9c5abb32721a1"
+      },
+      "provenance": {
+        "documented_origin": "Generated by benchmarks/data/build_atriumos_scenarios.py (main), written by the project team; labels assigned from first principles by the author.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_partial",
+        "evidence": "The builder's docstring says labels were assigned after reading prefilters.py, channel_taint.py and the NAVIGATOR corpus, so the author knew the mechanisms; the CHANNEL generalization fix was later verified against this set (injecagent_full_1054_rerun README, main)."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "ground_truth ATTACK -> attack, BENIGN -> benign (author-assigned). CHANNEL scenarios are two-call sessions.",
+      "known_issues": [
+        "Tiny (36); author-written, not independently labelled."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Calls only; CHANNEL scenarios are two-call sessions with no outputs or instruction."
+      }
+    },
+    {
+      "id": "openclaw_native",
+      "title": "OpenClaw-native hand-written scenarios",
+      "path": "evaluation/datasets/openclaw_native/attack_scenarios.jsonl",
+      "format": "openclaw_jsonl",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "30 cases (20 expected BLOCK, 10 expected ALLOW) in the exact `tool:exec args:{...}` format the corpus was designed for.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/openclaw_native/attack_scenarios.jsonl",
+        "git_blob_sha1": "1aa516eb9a2d38cfc8f136a16b9655f63e68fb9b"
+      },
+      "provenance": {
+        "documented_origin": "Hand-written by the project team (benchmarks/openclaw_native/run_native_benchmark.py docstring on main); two cases cite CVE-2026-25253.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_partial",
+        "evidence": "The runner's docstring says the cases are 'written in the exact format the corpus was designed for'; overlap with specific rules is not measured."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "expected BLOCK -> attack, expected ALLOW -> benign. Note the file's own ALLOW expectation: its original runner accepted ESCALATE on benign; this harness reports ESCALATE separately.",
+      "known_issues": [
+        "Small (30).",
+        "Written for the corpus format."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Calls only."
+      }
+    },
+    {
+      "id": "benign_traces",
+      "title": "50 hand-written benign developer sessions",
+      "path": "evaluation/datasets/benign_traces/benign_traces.py.txt",
+      "format": "benign_traces_py",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": true,
+      "purpose": "93 benign actions (editing, testing, git, package management) used as a false-positive gate for corpus aggressiveness.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/benign_traces.py",
+        "git_blob_sha1": "17776493d3bf90f15afed55403bf1183a9c303af"
+      },
+      "provenance": {
+        "documented_origin": "Hand-written in benchmarks/benign_traces.py (main): 'written by hand here (not generated from any model output)'. The copy is renamed .py.txt so it cannot be imported; content is byte-identical.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "The file states it is the FPR gate that runs before any InjecAgent run and that FPR > 5% means the corpus is too aggressive."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "Benign by author intent.",
+      "known_issues": [
+        "Hand-written; author-labelled."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [
+          "session.intent (author-written description of the session's purpose; not shown to be the instruction a user gave an agent, so it is NOT treated as user_instruction)"
+        ],
+        "notes": "Hand-written actions with no tool outputs."
+      }
+    },
+    {
+      "id": "injecagent_attackers_ds",
+      "title": "InjecAgent data-stealing attacker cases (32)",
+      "path": "tests/data/attacker_cases_ds.jsonl",
+      "format": "injecagent_attackers_jsonl",
+      "label": "attack",
+      "role": "development_tuning",
+      "runnable": false,
+      "not_runnable_reason": "InjecAgent cases become tool calls through the legacy two-step dispatch in injecagent_runner.py (main). That reconstruction is not reproduced here, so the cases are counted but not sent.",
+      "used_by_tests": [
+        "tests/test_channel_taint.py"
+      ],
+      "purpose": "Attacker instructions + tools used to test CHANNEL read-then-send detection.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/data/attacker_cases_ds.jsonl",
+        "git_blob_sha1": "d008cc0e4be560377c07bdded1ebfb938d086081"
+      },
+      "provenance": {
+        "documented_origin": "Copied from the InjecAgent benchmark (field names match its format). No URL, version, citation or licence recorded in the repo.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "eval/agentharm_independent/README.md (main) lists InjecAgent among the corpora the rules were mined from."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "All attack.",
+      "known_issues": [
+        "The headline 544 = 32 cases x 17 user cases."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Count-only; not sent."
+      }
+    },
+    {
+      "id": "injecagent_attackers_dh",
+      "title": "InjecAgent direct-harm attacker cases (30)",
+      "path": "evaluation/datasets/injecagent_dh/attacker_cases_dh.jsonl",
+      "format": "injecagent_attackers_jsonl",
+      "label": "attack",
+      "role": "development_tuning",
+      "runnable": false,
+      "not_runnable_reason": "Needs the legacy two-step dispatch (source payload + attack payload) from injecagent_runner.py (main); not reproduced.",
+      "purpose": "Direct-harm attacker instructions (physical, financial, data security).",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/data/attacker_cases_dh.jsonl",
+        "git_blob_sha1": "a4814fa052d46694e1fbab6679f6e285f5f5b2b2"
+      },
+      "provenance": {
+        "documented_origin": "Copied from the InjecAgent benchmark; no URL, version or licence recorded.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Same as injecagent_attackers_ds."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "All attack.",
+      "known_issues": [],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [],
+        "notes": "Count-only; not sent."
+      }
+    },
+    {
+      "id": "injecagent_user_cases",
+      "title": "InjecAgent benign user tasks (17)",
+      "path": "evaluation/datasets/injecagent_user_cases/user_cases.jsonl",
+      "format": "injecagent_user_cases_jsonl",
+      "label": "benign",
+      "role": "development_tuning",
+      "runnable": false,
+      "not_runnable_reason": "Benign side of the legacy InjecAgent replay; needs injecagent_runner.py's rendering of the user's tool call.",
+      "purpose": "The 17 benign user tasks paired with every attacker case (62 x 17 = 1,054 benign replay rows).",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/data/user_cases.jsonl",
+        "git_blob_sha1": "6f3dd74a29539ac36c1afec4455fdbfa7870fcb1"
+      },
+      "provenance": {
+        "documented_origin": "Copied from the InjecAgent benchmark; no URL, version or licence recorded.",
+        "source_url": null,
+        "license": "unknown (no licence recorded in the repository)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Used as the benign half of every InjecAgent replay."
+      },
+      "held_out_status": "not_verified",
+      "label_semantics": "All benign.",
+      "known_issues": [
+        "Only 17 distinct benign actions behind 1,054 benign replay rows."
+      ],
+      "context": {
+        "fields_available": [],
+        "source_mapping": {},
+        "present_but_not_mapped": [
+          "User Instruction",
+          "Tool Response Template"
+        ],
+        "notes": "Count-only; these fields would only become context after the legacy InjecAgent dispatch is reproduced."
+      }
+    },
+    {
+      "id": "hist_injecagent_fresh_full",
+      "title": "InjecAgent full replay (Jul 21 snapshot)",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/_fresh_full_injecagent/summary.json",
+        "git_blob_sha1": "702d4c5ebe448cafb11211bd9e551619969775fa"
+      },
+      "purpose": "Backs the paper's InjecAgent numbers; includes TRAJECTORY-decided rows (component removed from the MVP).",
+      "documented_counts": {
+        "attack_rows": 1054,
+        "benign_rows": 1054
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_injecagent_rerun_20260723",
+      "title": "InjecAgent full replay (Jul 23 rerun after CHANNEL change)",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/injecagent_full_1054_rerun_20260723/summary.json",
+        "git_blob_sha1": "72e1906455d01271e4a1c3a0f3a78d9aabf1d07b"
+      },
+      "purpose": "Shows the same command gave different numbers after a server change.",
+      "documented_counts": {
+        "attack_rows": 1054,
+        "benign_rows": 1054
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_kavach_pb",
+      "title": "Kavach-PB replay summary",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/results_v2/_fresh_kavach_pb.json",
+        "git_blob_sha1": "3e00a3968ccef4f3e7aef0a565ee4fda112fbf17"
+      },
+      "purpose": "Aggregate results on the 519 / 793 / 55 sets (counts ESCALATE as detection).",
+      "documented_counts": {
+        "attack": 519,
+        "benign_bfcl": 793,
+        "benign_v0": 55
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_naive_baseline",
+      "title": "Naive keyword baseline results",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "eval/naive_baseline/naive_baseline_results.json",
+        "git_blob_sha1": "8be92e235a3d8b67ef714325398965a92f63251b"
+      },
+      "purpose": "Keyword baseline on Kavach-PB.",
+      "documented_counts": {
+        "attack": 519,
+        "benign": 848
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_llm_judge_7b",
+      "title": "LLM-judge baseline (qwen2.5:7b) results",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "eval/llm_judge_baseline/llm_judge_baseline_results.json",
+        "git_blob_sha1": "c9b899ca962ebdfa2581ee2361e82dc4dedbea55"
+      },
+      "purpose": "Zero-shot LLM judge on Kavach-PB.",
+      "documented_counts": {
+        "attack": 519,
+        "benign": 848
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_llm_judge_32b",
+      "title": "LLM-judge baseline (qwen2.5:32b) results",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "eval/llm_judge_baseline_32b/llm_judge_baseline_32b_results.json",
+        "git_blob_sha1": "c558872199c63f227a4c6284fc2b8592d17289fe"
+      },
+      "purpose": "Zero-shot LLM judge on Kavach-PB.",
+      "documented_counts": {
+        "attack": 519,
+        "benign": 848
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_agentharm",
+      "title": "AgentHarm-derived check results",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "eval/agentharm_independent/results.json",
+        "git_blob_sha1": "af888d2b5f10f5007ce117e242fcc6d97661895c"
+      },
+      "purpose": "79 harmful + 80 benign LLM-generated calls dispatched to the pre-MVP pipeline. The tool code is a third-party copy (MIT, per the README on main, which records URL github.com/UKGovernmentBEIS/inspect_evals and fetch date 2026-07-23); the call arguments were generated by qwen2.5:7b and classified by hand.",
+      "documented_counts": {
+        "harmful_dispatched": 79,
+        "benign_dispatched": 80,
+        "in_scope_harmful": 44
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "UKGovernmentBEIS/inspect_evals AgentHarm tool implementations (unmodified copies, per eval/agentharm_independent/README.md on main); arguments LLM-generated.",
+        "source_url": "https://github.com/UKGovernmentBEIS/inspect_evals",
+        "license": "MIT with a safety-use clause, as stated in the README on main (not independently checked)",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_obfuscation",
+      "title": "Obfuscation robustness results",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "eval/obfuscation_robustness/results.json",
+        "git_blob_sha1": "6ffeddc838a4b1dd5cadf2d84b41b22e0acdb513"
+      },
+      "purpose": "Encode/split/indirect transforms of cases that were already detected (baseline detection 100% by construction).",
+      "documented_counts": {
+        "transformed": 335
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_locked_baseline",
+      "title": "Locked replay baseline numbers",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "benchmarks/locked_baseline.json",
+        "git_blob_sha1": "0054daf3780abde2ca07374fcc02da5e0219f9c2"
+      },
+      "purpose": "Regression thresholds for the replay CI; three entries are reference-only values from another branch.",
+      "documented_counts": {
+        "entries": 6
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    },
+    {
+      "id": "hist_minister_runs",
+      "title": "Per-case minister votes (gemma-4-26b InjecAgent run)",
+      "role": "historical_benchmark_result",
+      "runnable": false,
+      "not_runnable_reason": "Recorded output of an older pipeline, not an input dataset. Not copied; see git_path on main.",
+      "source": {
+        "git_ref": "main",
+        "git_commit": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+        "git_path": "minister_runs.jsonl",
+        "git_blob_sha1": "22cecebc1037120fd68aac59f78dd48e41c471ac"
+      },
+      "purpose": "Per-case votes from the pre-MVP pipeline.",
+      "documented_counts": {
+        "rows": 2108
+      },
+      "documented_counts_source": "docs/test-data-inventory.md (counts measured during that audit)",
+      "provenance": {
+        "documented_origin": "Generated by project scripts against the pre-MVP pipeline.",
+        "source_url": null,
+        "license": "project-authored; no licence recorded",
+        "credibility_established": false
+      },
+      "overlap_with_rule_development": {
+        "status": "documented_yes",
+        "evidence": "Produced by the pre-MVP pipeline on development data."
+      },
+      "held_out_status": "not_verified"
+    }
+  ]
+}

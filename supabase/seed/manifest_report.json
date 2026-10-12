@@ -1,0 +1,87 @@
+{
+  "by_definition_type": {
+    "channel_behavior": 6,
+    "channel_destination_tool": 10,
+    "channel_source_rule": 4,
+    "channel_source_tool": 32,
+    "corpus_pattern": 1647,
+    "deterministic_rule": 212,
+    "minister_description": 4,
+    "navigator_authflow_taxonomy": 5,
+    "navigator_tier_rule": 4,
+    "parser_pattern": 14,
+    "threshold_config": 6
+  },
+  "by_minister": {
+    "CHANNEL": 461,
+    "EXECUTOR": 513,
+    "NAVIGATOR": 453,
+    "VAULT": 517
+  },
+  "by_minister_type_origin": {
+    "CHANNEL/channel_behavior/current_mvp": 6,
+    "CHANNEL/channel_destination_tool/current_mvp": 10,
+    "CHANNEL/channel_source_rule/current_mvp": 4,
+    "CHANNEL/channel_source_tool/current_mvp": 32,
+    "CHANNEL/corpus_pattern/candidate": 52,
+    "CHANNEL/corpus_pattern/historical": 203,
+    "CHANNEL/corpus_pattern/legacy_main": 152,
+    "CHANNEL/minister_description/legacy_main": 1,
+    "CHANNEL/threshold_config/legacy_main": 1,
+    "EXECUTOR/corpus_pattern/candidate": 50,
+    "EXECUTOR/corpus_pattern/historical": 200,
+    "EXECUTOR/corpus_pattern/legacy_main": 150,
+    "EXECUTOR/deterministic_rule/current_mvp": 64,
+    "EXECUTOR/deterministic_rule/experimental": 36,
+    "EXECUTOR/minister_description/legacy_main": 1,
+    "EXECUTOR/parser_pattern/current_mvp": 11,
+    "EXECUTOR/threshold_config/legacy_main": 1,
+    "NAVIGATOR/corpus_pattern/candidate": 90,
+    "NAVIGATOR/corpus_pattern/current_mvp": 100,
+    "NAVIGATOR/corpus_pattern/historical": 200,
+    "NAVIGATOR/corpus_pattern/legacy_main": 50,
+    "NAVIGATOR/minister_description/legacy_main": 1,
+    "NAVIGATOR/navigator_authflow_taxonomy/experimental": 5,
+    "NAVIGATOR/navigator_tier_rule/experimental": 4,
+    "NAVIGATOR/threshold_config/current_mvp": 1,
+    "NAVIGATOR/threshold_config/experimental": 1,
+    "NAVIGATOR/threshold_config/legacy_main": 1,
+    "VAULT/corpus_pattern/candidate": 50,
+    "VAULT/corpus_pattern/historical": 200,
+    "VAULT/corpus_pattern/legacy_main": 150,
+    "VAULT/deterministic_rule/current_mvp": 63,
+    "VAULT/deterministic_rule/experimental": 49,
+    "VAULT/minister_description/legacy_main": 1,
+    "VAULT/parser_pattern/current_mvp": 3,
+    "VAULT/threshold_config/legacy_main": 1
+  },
+  "by_origin_status": {
+    "candidate": 242,
+    "current_mvp": 294,
+    "experimental": 95,
+    "historical": 803,
+    "legacy_main": 510
+  },
+  "duplicate_ids_within_one_source": [],
+  "identical_content_across_records": {
+    "groups": 402,
+    "records_involved": 1329
+  },
+  "ids_appearing_in_more_than_one_source": 492,
+  "pinned_refs": {
+    "main": "3eb7b7e447dfed499dcc13931e8b9f12acf2df69",
+    "mvp-core": "328bd83c6e38e65291c89875bdfd62882345a57b",
+    "origin/navigator-rearch": "3e5cadda7411656b8f56cc8e4c2ca864a3d011dd"
+  },
+  "provenance_flag_counts": {
+    "source_citation_missing": 92,
+    "source_citation_unstructured": 90,
+    "source_license_unknown": 1944,
+    "source_url_unknown": 1944
+  },
+  "records_missing_source_citation": 92,
+  "records_unstructured_source_citation": 90,
+  "records_with_license": 0,
+  "records_with_source_url": 0,
+  "total_records": 1944
+}
