@@ -17,6 +17,7 @@ policy.py's POL-007).
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Dict, List, Optional
 
@@ -33,6 +34,13 @@ except ImportError:  # pragma: no cover - exercised only if the dependency is mi
 # Dialects ast_parse.py confirms it can genuinely AST-parse.
 _SHELL_DIALECTS = frozenset({"sh", "bash"})
 _POWERSHELL_DIALECTS = frozenset({"powershell"})
+# VS Code Local's terminal tool name is an adapter name, not a shell dialect.
+_TERMINAL_WRAPPER_NAMES = frozenset({"run_in_terminal", "runinterminal", "run_terminal"})
+# zsh and dash use a POSIX-compatible parser approximation, never claimed as full coverage.
+_POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
+# Restrict the approximation to simple portable commands. Metacharacters,
+# substitutions, quoting, redirections, and command chaining remain indeterminate.
+_SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
 
 _DECODE_COMMANDS = re.compile(r"^(base64|base32|base16|xxd)$", re.IGNORECASE)
 _DECODE_FLAG = re.compile(r"^-?-?d(ecode)?$", re.IGNORECASE)
@@ -48,13 +56,56 @@ class EvidenceModule:
         raise NotImplementedError
 
 
+def _configured_terminal_dialect() -> Optional[str]:
+    """Resolve terminal-wrapper shell from local runtime configuration.
+
+    KAVACH_TERMINAL_DIALECT is the explicit override. SHELL is a fallback for
+    macOS/Linux sessions started from the user's configured shell. Unknown
+    values stay unknown so the evidence layer fails closed instead of guessing.
+    """
+    raw = os.environ.get("KAVACH_TERMINAL_DIALECT") or os.environ.get("SHELL")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    name = raw.strip().replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name in {"bash", "bash.exe"}:
+        return "bash"
+    if name in {"sh", "sh.exe"}:
+        return "sh"
+    if name in {"dash", "dash.exe"}:
+        return "dash"
+    if name in {"zsh", "zsh.exe"}:
+        return "zsh"
+    if name in {"powershell", "powershell.exe", "pwsh", "pwsh.exe"}:
+        return "powershell"
+    if name in {"cmd", "cmd.exe", "command.com"}:
+        return "command_prompt"
+    return name or None
+
+
+def _parser_dialect(dialect: Optional[str]) -> Optional[str]:
+    """Choose a parser only when the configured shell has a known approximation."""
+    if dialect == "zsh":
+        return "bash"  # bashlex handles the common POSIX-compatible subset
+    if dialect == "dash":
+        return "sh"
+    return dialect
+
+
 def _command_text_and_dialect(call: ToolCall) -> Optional[tuple]:
     """Best-effort extraction of (command_text, dialect) from common argument
     shapes. Returns None if the call doesn't look like a shell/script
     invocation at all -- that is not itself suspicious, just not this
     module's business."""
     args = call.arguments or {}
-    dialect = call.tool_name if call.tool_name in (_SHELL_DIALECTS | _POWERSHELL_DIALECTS | {"command_prompt"}) else None
+    tool_name = call.tool_name.strip().lower().replace("-", "_")
+    if tool_name in (_SHELL_DIALECTS | _POWERSHELL_DIALECTS | {"command_prompt"}):
+        dialect = tool_name
+    elif tool_name in _TERMINAL_WRAPPER_NAMES:
+        # run_in_terminal is a host wrapper. Treating its name as a dialect
+        # incorrectly marks every command indeterminate and triggers POL-007.
+        dialect = _configured_terminal_dialect()
+    else:
+        dialect = None
     for key in ("command", "cmd", "script", "code"):
         v = args.get(key)
         if isinstance(v, str) and v.strip():
@@ -70,21 +121,42 @@ class ShellEvidenceModule(EvidenceModule):
         if found is None:
             return []
         cmd, dialect = found
-        extracted = ast_parse.extract_words(cmd, dialect)
-        if extracted.used_ast:
+        parser_dialect = _parser_dialect(dialect)
+        extracted = ast_parse.extract_words(cmd, parser_dialect)
+        if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
+            # bashlex is only a POSIX-compatible approximation for zsh/dash.
+            # Call it useful coverage only for a simple command with no shell
+            # metacharacters. Chaining, substitutions, quoting, and redirects
+            # remain indeterminate rather than being silently treated as safe.
+            if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(cmd.strip()):
+                coverage = "partial"
+                claim = (
+                    f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
+                    f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
+                    "simple portable syntax only"
+                )
+                confidence = 0.65
+            else:
+                coverage = "indeterminate"
+                claim = (
+                    f"terminal shell {dialect} command uses syntax outside the simple portable subset; "
+                    "shell-specific or compound semantics remain unverified"
+                )
+                confidence = 0.0
+        elif extracted.used_ast:
             coverage = "full"
             claim = f"parsed via real {dialect} grammar ({len(extracted.words)} argument words)"
             confidence = 1.0
-        elif dialect in _SHELL_DIALECTS or dialect in _POWERSHELL_DIALECTS:
+        elif dialect in (_SHELL_DIALECTS | _POWERSHELL_DIALECTS):
             coverage = "partial"
             claim = f"AST parse of a theoretically-supported dialect ({dialect}) failed; fell back to tokenizer"
             confidence = 0.3
         else:
             coverage = "indeterminate"
-            claim = f"no AST parser applies to dialect {dialect!r}; tokenizer-only, unsupported-syntax risk not ruled out"
+            claim = f"no reliable AST coverage for configured dialect {dialect!r}; tokenizer-only, unsupported-syntax risk not ruled out"
             confidence = 0.0
         return [EvidenceFinding(module=self.name, claim=claim, confidence=confidence, coverage=coverage,
-                                 supporting={"dialect": dialect, "word_count": len(extracted.words)})]
+                                 supporting={"dialect": dialect, "parser_dialect": parser_dialect, "word_count": len(extracted.words)})]
 
 
 def _walk_assignments_and_sinks(trees) -> tuple:
@@ -179,9 +251,10 @@ class DecodeExecutionEvidenceModule(EvidenceModule):
         if found is None:
             return []
         cmd, dialect = found
-        if dialect not in _SHELL_DIALECTS or not _BASHLEX_AVAILABLE:
-            return []  # out of scope for this module; ShellEvidenceModule already reports coverage for other dialects
+        if dialect not in (_SHELL_DIALECTS | _POSIX_APPROXIMATION_DIALECTS) or not _BASHLEX_AVAILABLE:
+            return []  # out of scope for this module; ShellEvidenceModule reports unknown/unsupported dialect coverage
         try:
+            # zsh/dash use bashlex only as a conservative common-syntax approximation.
             trees = bashlex.parse(cmd)
         except Exception:
             return [EvidenceFinding(

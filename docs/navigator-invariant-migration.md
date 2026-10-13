@@ -30,6 +30,10 @@ This rebuild replaces semantic embedding retrieval as the active NAVIGATOR runti
 
 The policy rules live in the Invariant DSL; the adapter still computes structured facts. The trace uses the ledger's full earlier history, not caller-supplied parent references. POL-009 is a conservative rule and requires the earlier event to have been recorded as ALLOW with the three earlier specialist results present and ALLOW.
 
+### VS Code terminal wrapper dialect
+
+VS Code Local reports terminal invocations as `run_in_terminal`, which identifies the host tool rather than the underlying shell. NAVIGATOR resolves the shell from `KAVACH_TERMINAL_DIALECT` (preferred explicit setting) or the API process's `SHELL` environment variable. For `zsh` and `dash`, bashlex is only used as a POSIX-compatible approximation and coverage is marked `partial`, not `full`. If the shell is unknown or unsupported, coverage remains `indeterminate` and POL-007 still escalates; unsupported dialects are not silently treated as safe. Decode-then-execute inspection remains active for the parsed POSIX-compatible subset.
+
 ## Trust boundary and session setup
 
 The preferred integration calls NavigatorMinister.start_session(session_id, goal=..., workspace_scope=..., permitted_categories=..., denied_categories=..., approved_destinations=..., high_impact_categories_requiring_approval=...) from a trusted orchestrator before actions begin.
