@@ -156,8 +156,8 @@ def test_allow_is_the_only_decision_that_permits_tool_execution(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("bad_result", "reason_fragment"),
     [
-        ({"verdict": "UNKNOWN"}, "failed"),
-        ({}, "failed"),
+        ({"verdict": "UNKNOWN"}, "valid verdict"),
+        ({}, "valid verdict"),
     ],
 )
 def test_malformed_kavach_decision_fails_closed(
