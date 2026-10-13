@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#050505">
 <meta name="description" content="Kavach is a safety layer for evaluating LLM-agent tool calls before execution.">
 <title>Kavach — Safety Before Action</title>
+<link rel="icon" type="image/png" href="/assets/kavach-shield.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -35,7 +36,7 @@ a:hover { opacity: .75; }
 ::selection { color: #050505; background: #fff; }
 .masthead { max-width: 1600px; margin: 0 auto; min-height: 82px; padding: 0 clamp(20px, 4.5vw, 72px); display: flex; align-items: center; justify-content: space-between; gap: 28px; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; background: var(--surface); color: var(--surface-ink); font-size: 19px; font-weight: 800; letter-spacing: -.09em; border-radius: 2px; }
+.brand-mark { width: 42px; height: 42px; display: block; object-fit: contain; flex-shrink: 0; }
 .brand-word { font-size: 15px; font-weight: 750; letter-spacing: .17em; }
 .brand-meta { display: block; margin-top: 1px; color: var(--muted); font: 9px/1.5 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .nav-group { display: flex; align-items: center; gap: clamp(14px, 2.4vw, 34px); }
@@ -235,7 +236,7 @@ textarea { min-height: 150px; resize: vertical; font: 12px/1.7 var(--mono); }
 <body>
 <header class="masthead">
   <a class="brand" href="/" aria-label="Kavach home">
-    <span class="brand-mark">K</span>
+    <img class="brand-mark" src="/assets/kavach-shield.png" alt="Kavach shield">
     <span><span class="brand-word">KAVACH</span><span class="brand-meta">Agent safety / 01</span></span>
   </a>
   <nav class="nav-group" aria-label="Main navigation">
