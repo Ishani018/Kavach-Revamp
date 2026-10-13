@@ -24,7 +24,7 @@ The next three milestones should be:
 
 ## P0 — correctness before polish
 
-Observed issue: a pure literal Python print command was escalated by NAVIGATOR as `POL-007`, because the zsh/dash approximation rejected quoted arguments. A fix is proposed in PR #9; do not call the issue fixed until CI and the live Local test pass.
+Observed issue: a pure literal Python print command was escalated by NAVIGATOR as `POL-007`, because the zsh/dash approximation rejected quoted arguments. The constrained fix is merged via PR #9 and its full runtime test workflow passed. The real Local-harness result still needs verification on the developer's machine before calling the end-to-end behavior fixed.
 
 Regression gates:
 
