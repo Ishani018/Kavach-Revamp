@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: kavach-agent-safety
+    runtime: python
+    plan: free
+    branch: mvp-core
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn kavach.api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: KAVACH_DASHBOARD_PASSWORD
+        sync: false
+      - key: KAVACH_SESSION_SECRET
+        sync: false
