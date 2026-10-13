@@ -56,7 +56,7 @@ def _safe_inline(value: Any, limit: int = MAX_MINISTER_NOTE_CHARS) -> str:
     """Collapse and cap server-provided text before displaying it to a user."""
     if not isinstance(value, str):
         return ""
-    normalized = " ".join(ch for ch in value if ch.isprintable()).split()
+    normalized = "".join(ch for ch in value if ch.isprintable()).split()
     text = " ".join(normalized)
     return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
 
