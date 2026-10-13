@@ -2,7 +2,7 @@
 
 A small, local security check for LLM agent tool calls. You submit a proposed tool call; Kavach runs four detectors ("ministers") on it and a "Speaker" combines them into one verdict: **BLOCK**, **ESCALATE** (ask a human), or **ALLOW**.
 
-This is the extracted working core of the research project, which is preserved untouched on the `main` branch. It is **not deployed and not production-ready**.
+This is the extracted working core of the research project. NAVIGATOR runtime work is isolated on `navigator-invariant-runtime` and is not deployed or production-ready.
 
 ## Components
 
@@ -11,7 +11,7 @@ This is the extracted working core of the research project, which is preserved u
 | VAULT | Credential / secret detection (regex rules + credential-path parsing) | `kavach/ministers/vault.py` → `prefilters.py` |
 | EXECUTOR | Dangerous execution (deny-list, import-alias AST resolution, fetch-to-disk) | `kavach/ministers/executor.py` → `prefilters.py`, `ast_parse.py`, `struct_parse.py` |
 | CHANNEL | Session-level sensitive-read → external-send (taint) plus destination provenance | `kavach/ministers/channel.py` → `channel_taint.py`. State is per `session_id`. |
-| NAVIGATOR | Semantic attack detection: BGE embeddings + BM25 hybrid retrieval over the attack corpus | `kavach/ministers/navigator.py` → `retrieval.py`, `kavach/data/kavach_corpus_v1.json` |
+| NAVIGATOR | Intent and trajectory security via Invariant Guardrails LocalPolicy over redacted session traces | `kavach/ministers/navigator.py` → `navigator2/invariant_policy.py`, `navigator2/policies.iv` |
 | Speaker | Deterministic final verdict | `kavach/speaker.py` |
 | Coordinator | Validates input, runs all four ministers in fixed order, calls the Speaker | `kavach/coordinator.py` |
 
@@ -32,7 +32,7 @@ Secrets matched by VAULT are never echoed in results or logs. Exception messages
 
 ## Run
 
-Python 3.9+ (developed on 3.9.6).
+Python 3.10+ (required by Invariant Guardrails).
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -40,7 +40,7 @@ pip install -r requirements.txt
 python -m uvicorn kavach.api:app --host 127.0.0.1 --port 8088
 ```
 
-First start downloads `BAAI/bge-base-en-v1.5` (~440 MB) and builds NAVIGATOR's ChromaDB in `.chroma_navigator/` from the corpus (about 20 s). If NAVIGATOR cannot load, the server refuses to start.
+NAVIGATOR uses Invariant Guardrails' local deterministic policy interpreter; it does not download embeddings or build a vector database and does not call a paid model API. If its policy file cannot load, NAVIGATOR fails closed during startup.
 
 ```bash
 curl localhost:8088/health
@@ -62,9 +62,12 @@ python -m tests.test_ast_parse
 
 - In-memory CHANNEL state, unbounded, lost on restart. No auth, persistence, ledger, or rate limiting.
 - CHANNEL's provenance check escalates any destination-shaped value that is not in `context.user_instruction` or prior `context.tool_output`; callers that supply no context will see more ESCALATEs.
-- NAVIGATOR is threshold-based retrieval, not a classifier. It has false negatives (e.g. a plain-English prompt-injection string scored 0.46, below the 0.50 grey threshold) and false positives (`bash ls -la` scores 0.55 → ESCALATE). Thresholds are unchanged from the research config (block 0.70, grey 0.50).
-- NAVIGATOR queries the semantic corpus only. The research server's "technical" corpus is not loaded by the live loader and is not included.
-- Detection numbers from the research project were measured on the old pipeline and are not re-validated here.
+- NAVIGATOR's deterministic rules are intentionally incomplete; this is a change of engine, not proof of real-world attack coverage.
+- The trusted orchestrator should seed a task contract at session start. Without one, NAVIGATOR uses a deliberately unscoped contract and unresolved ambiguity rather than assuming broad permission.
+- If `context.user_instruction` is used to seed a contract, the host must guarantee that field came from a trusted user/orchestrator boundary. The current HTTP API does not authenticate the caller.
+- Confidentiality is inferred from extracted artifact paths and prior minister results; it is heuristic provenance, not byte-level taint tracking.
+- The old embedding/BM25 retriever and corpus remain for research, but are not loaded at runtime. Install `requirements-research.txt` only to run that retired experiment.
+- Real-world effectiveness remains INCONCLUSIVE until held-out evaluation is run under a separately controlled protocol.
 
 ## Excluded from this MVP (still on `main`)
 
