@@ -56,8 +56,9 @@ def _safe_inline(value: Any, limit: int = MAX_MINISTER_NOTE_CHARS) -> str:
     """Collapse and cap server-provided text before displaying it to a user."""
     if not isinstance(value, str):
         return ""
-    normalized = "".join(ch for ch in value if ch.isprintable()).split()
-    text = " ".join(normalized)
+    normalized = " ".join(value.replace("\\r", " ").replace("\\n", " ").replace("\\t", " ").split())
+    text = "".join(ch for ch in normalized if ch.isprintable())
+    text = " ".join(text.split())
     return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
 
 
@@ -399,17 +400,34 @@ def _handle_pre_tool_use(
     fingerprint = _fingerprint(tool_name, tool_input)
     try:
         result = api_call(payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("Kavach returned an invalid decision.")
         verdict = result.get("verdict")
         if verdict not in VALID_VERDICTS:
             raise RuntimeError("Kavach returned no valid verdict.")
+        ministers = result.get("ministers")
+        if not isinstance(ministers, dict) or set(ministers) != set(MINISTER_ORDER):
+            raise RuntimeError("Kavach returned an incomplete minister breakdown.")
+        minister_verdicts: list[str] = []
+        for name in MINISTER_ORDER:
+            item = ministers.get(name)
+            minister_verdict = item.get("verdict") if isinstance(item, dict) else None
+            if minister_verdict not in VALID_VERDICTS:
+                raise RuntimeError("Kavach returned an invalid minister verdict.")
+            minister_verdicts.append(minister_verdict)
+        expected_verdict = (
+            "BLOCK" if "BLOCK" in minister_verdicts
+            else "ESCALATE" if "ESCALATE" in minister_verdicts
+            else "ALLOW"
+        )
+        if verdict != expected_verdict:
+            raise RuntimeError("Kavach returned an inconsistent final verdict.")
         # Do not echo the coordinator's top-level reason verbatim: EXECUTOR
         # match reasons can include command excerpts, and CHANNEL can include
         # destination-shaped values. The detailed report below applies per-minister
         # redaction before it is shown or passed back to the model.
         decided_by = result.get("decided_by")
-        ministers = result.get("ministers")
-        if not isinstance(ministers, dict):
-            ministers = {}
+        # The response was validated above; all four entries must be present.
         minister_summary = []
         for name in MINISTER_ORDER:
             item = ministers.get(name)
