@@ -85,9 +85,10 @@ def _count_from_content_range(value: str | None) -> int | None:
 
 
 def _supabase_headers(secret_key: str) -> dict[str, str]:
+    # Supabase's modern sb_secret_* keys are not JWTs. Send them only in
+    # apikey; using Authorization: Bearer causes Invalid JWT errors.
     return {
         "apikey": secret_key,
-        "Authorization": "Bearer " + secret_key,
         "Accept": "application/json",
     }
 
