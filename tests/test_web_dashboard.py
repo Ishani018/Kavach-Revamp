@@ -17,6 +17,13 @@ def test_dashboard_is_served():
     assert "Kavach" in response.text
     assert "Evaluate a proposed tool call" in response.text
 
+def test_dashboard_logo_asset_is_served():
+    with client() as c:
+        response = c.get("/assets/kavach-shield.png")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
 
 def test_session_status_does_not_require_supabase(monkeypatch):
     for key in (
