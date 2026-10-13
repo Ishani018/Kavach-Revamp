@@ -1,3 +1,9 @@
+# NAVIGATOR runtime rebuild note (2026-10-13)
+
+The active implementation on branch navigator-invariant-runtime now uses Invariant Guardrails LocalPolicy through navigator2/invariant_policy.py and the declarative rule file navigator2/policies.iv. The original nine-policy Python engine remains in policy.py as a legacy reference/test path; core.Navigator2 defaults to the Invariant-backed engine. The old embedding/BM25 retrieval is no longer active in navigator.py. This branch has not been merged into mvp-core or main. The implementation must pass CI before it should be considered integrated. Real-world effectiveness remains INCONCLUSIVE.
+
+---
+
 # NAVIGATOR 2.0 — final report
 
 ## 0. Continuation: making the security core genuinely zero-LLM (read this first)
