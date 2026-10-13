@@ -41,6 +41,6 @@ def scan_to_result(scan: Optional[MinisterScan], name: str, *, redact_match: boo
 def __getattr__(name: str):
     """Load the legacy embedding/BM25 result type only when explicitly requested."""
     if name == "MinisterScan":
-        from .retrieval import MinisterScan
+        from .scan import MinisterScan
         return MinisterScan
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
