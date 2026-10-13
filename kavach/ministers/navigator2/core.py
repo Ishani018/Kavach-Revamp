@@ -6,8 +6,9 @@ Navigator2 orchestrator: wires Components 1-7 together for one proposed
 ToolCall. See docs/navigator2-architecture.md SS2 for the data-flow diagram
 this function implements.
 
-This class is never imported by kavach/coordinator.py. It is only ever
-constructed and called by shadow.py (or directly, by tests/episodes.py).
+On the navigator-invariant-runtime branch, NavigatorMinister constructs
+this orchestrator in the active NAVIGATOR verdict path. ShadowRunner remains
+available for isolated regression/evaluation comparisons.
 """
 
 from __future__ import annotations
@@ -146,7 +147,7 @@ class Navigator2:
         *,
         contract_store: Optional[TaskContractStore] = None,
         ledger: Optional[SessionEventLedger] = None,
-        policy_engine: Optional[PolicyEngine] = None,
+        policy_engine: Optional[Any] = None,
         reasoner_provider: Optional[TrajectoryReasonerProvider] = None,
         evidence_modules: Optional[list] = None,
         relevant_event_window: int = 20,
