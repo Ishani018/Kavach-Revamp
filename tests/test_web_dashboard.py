@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from kavach.api import create_app
+from kavach.api import _supabase_headers, create_app
 
 
 def client():
@@ -75,3 +75,9 @@ def test_catalog_requires_a_signed_in_session(monkeypatch):
     with client() as c:
         response = c.get("/api/catalog")
     assert response.status_code == 401
+
+
+def test_modern_supabase_secret_key_is_sent_only_as_apikey():
+    headers = _supabase_headers("sb_secret_test_key")
+    assert headers["apikey"] == "sb_secret_test_key"
+    assert "Authorization" not in headers
