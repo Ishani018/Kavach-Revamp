@@ -113,3 +113,11 @@ flowchart LR
 - The custom demo agent never retries or switches tools after denial.
 - The visual demo gets its verdicts from the live loopback API, labels mock/static content, and never executes scenario payloads from its own demo buttons.
 - A live Local-harness test proves denial occurs before the side effect. Dashboard/API tests and CI alone do not prove the VS Code hook was installed or honored.
+
+
+## Official VS Code references
+
+- [Local hooks reference](https://code.visualstudio.com/docs/agents/reference/hooks-reference) — supported Local event names, payloads, pre-tool decisions, and hook output.
+- [Custom agents in VS Code](https://code.visualstudio.com/docs/agent-customization/custom-agents) — workspace `.agent.md` files, scoped hooks, and handoffs.
+- [AI extensibility overview](https://code.visualstudio.com/api/extension-guides/ai/ai-extensibility-overview) — when to choose a Language Model Tool, MCP server, Chat Participant, or direct Language Model API.
+- [Chat Participant API](https://code.visualstudio.com/api/extension-guides/ai/chat) — streamed Markdown, progress, buttons, follow-ups, and orchestration within VS Code Chat.
