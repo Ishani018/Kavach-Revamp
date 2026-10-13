@@ -351,7 +351,10 @@ def process_event(
                 # The action has already executed; a post-hook cannot undo it.
                 pass
         return {"continue": True}
-    return {"continue": True}
+    # This script is registered only for the three events above. If VS Code
+    # invokes it with an unknown/malformed event name, never silently permit a
+    # potentially pre-execution event.
+    return _deny("Kavach blocked this operation because the hook event type was missing or unsupported.")
 
 
 def main() -> int:
