@@ -83,6 +83,9 @@ def test_legacy_text_wire_format_accepted():
 
 
 def test_end_to_end_with_real_ministers(navigator):
+    navigator.start_session(
+        "e", goal="Inspect project files", permitted_categories=["read_file", "bash"]
+    )
     coord = Coordinator([VaultMinister(), ExecutorMinister(), ChannelMinister(), navigator])
 
     benign = coord.evaluate(ToolCall(tool_name="read_file", arguments={"path": "src/main.py"}, session_id="e"))
@@ -96,14 +99,14 @@ def test_end_to_end_with_real_ministers(navigator):
 
 
 def test_navigator_result_reaches_the_speaker(navigator):
-    """Only NAVIGATOR can fire on a corpus-text command: its real BLOCK must become the final verdict."""
-    import json
-    from pathlib import Path
-
-    corpus = json.loads((Path(__file__).resolve().parent.parent / "kavach/data/kavach_corpus_v1.json").read_text())
-    pat = corpus["NAVIGATOR"]["patterns"][0]
+    """A declarative task-contract rule blocks a call through the existing Speaker."""
+    navigator.start_session(
+        "n", goal="Do not execute shell commands", denied_categories=["bash"]
+    )
     coord = Coordinator([VaultMinister(), ExecutorMinister(), ChannelMinister(), navigator])
-    d = coord.evaluate(ToolCall(tool_name="bash", arguments={"command": pat["L3_surface"][:150]}, session_id="n"))
+    d = coord.evaluate(ToolCall(
+        tool_name="bash", arguments={"command": "echo hello"}, session_id="n"
+    ))
     assert d.ministers["NAVIGATOR"].verdict == "BLOCK"
     assert d.ministers["VAULT"].verdict == d.ministers["EXECUTOR"].verdict == "ALLOW"
     assert d.verdict == "BLOCK" and d.decided_by == "NAVIGATOR"
