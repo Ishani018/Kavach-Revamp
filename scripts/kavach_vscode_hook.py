@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VS Code Local-harness hook that asks Kavach before a tool is executed.
+"""VS Code Local-harness hook that checks with Kavach before tool execution.
 
 The hook intentionally talks only to a loopback HTTP address. It never calls a
 hosted Kavach URL, never persists raw tool arguments, and fails closed when the
@@ -288,7 +288,7 @@ def _handle_pre_tool_use(
             "decided_by": decided_by if isinstance(decided_by, str) else None,
             "minister_summary": minister_summary,
             "reason": reason[:MAX_REASON_CHARS],
-            "execution": "pending" if verdict == "ALLOW" else ("approval_required" if verdict == "ESCALATE" else "blocked"),
+            "execution": "pending" if verdict == "ALLOW" else "blocked",
         })
         try:
             _audit(data_home, record)
@@ -296,12 +296,24 @@ def _handle_pre_tool_use(
             return _deny("Kavach blocked this call because its private audit log could not be written.")
         if verdict == "ALLOW":
             permission = "allow"
+            hook_reason = "Kavach ALLOW: %s" % reason
         elif verdict == "BLOCK":
             permission = "deny"
+            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
+            hook_reason = "Kavach BLOCK%s: %s" % (actor, reason)
         else:
-            permission = "ask"
-        actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
-        return _hook_decision(permission, "Kavach %s%s: %s" % (verdict, actor, reason))
+            # VS Code 1.141.0 did not surface an approval prompt for native
+            # "ask" in the live Local-harness test; the tool ran after an
+            # ESCALATE. Fail closed until that host behavior is independently
+            # verified, rather than treating ask as a reliable security gate.
+            permission = "deny"
+            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
+            hook_reason = (
+                "Kavach ESCALATE%s: %s. Approval prompting is not verified in this "
+                "VS Code session, so this call was denied fail-closed."
+                % (actor, reason)
+            )
+        return _hook_decision(permission, hook_reason)
     except Exception as exc:
         # Never include request bodies, raw arguments, or upstream response
         # bodies in the hook output; only safe, fixed failure messages escape.

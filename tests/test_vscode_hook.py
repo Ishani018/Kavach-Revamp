@@ -165,11 +165,20 @@ def test_block_decision_prevents_executor_callback_side_effect(tmp_path: Path) -
     assert not marker.exists()
 
 
-def test_escalate_requires_approval_in_vscode(tmp_path: Path) -> None:
+def test_escalate_fails_closed_when_native_approval_is_unverified(tmp_path: Path) -> None:
     with fake_kavach_api(api_result("ESCALATE", "Intent is unresolved.")) as (url, _):
         output = run_hook(pretool_event(), tmp_path, url)
-    assert decision(output) == "ask"
-    assert "ESCALATE" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+    assert decision(output) == "deny"
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "ESCALATE" in reason
+    assert "denied fail-closed" in reason
+    assert "Approval prompting is not verified" in reason
+
+    audit = tmp_path / "kavach-home" / "events.jsonl"
+    record = json.loads(audit.read_text(encoding="utf-8").splitlines()[0])
+    assert record["verdict"] == "ESCALATE"
+    assert record["execution"] == "blocked"
 
 
 def test_allow_is_the_only_decision_that_permits_tool_execution(tmp_path: Path) -> None:
