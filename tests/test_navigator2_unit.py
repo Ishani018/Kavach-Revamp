@@ -223,6 +223,17 @@ class TestEvidence:
         findings = ev.DecodeExecutionEvidenceModule().analyze(call)
         assert any(finding.coverage == "full" and "decode-then-execute" in finding.claim for finding in findings)
 
+    def test_vscode_terminal_zsh_compound_syntax_remains_indeterminate(self, monkeypatch):
+        """Only simple portable syntax benefits from the zsh/bashlex approximation."""
+        monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+        call = ToolCall(
+            tool_name="run_in_terminal",
+            arguments={"command": 'printf safe; eval "$PAYLOAD"'},
+            session_id="s",
+        )
+        findings = ev.ShellEvidenceModule().analyze(call)
+        assert findings and findings[0].coverage == "indeterminate"
+
     def test_decode_execution_resolves_single_hop_indirection(self):
         call = ToolCall(tool_name="bash",
                          arguments={"command": 'X=$(echo c2VjcmV0 | base64 -d); eval "$X"'}, session_id="s")
