@@ -175,6 +175,11 @@ def test_escalate_fails_closed_when_native_approval_is_unverified(tmp_path: Path
     assert "denied fail-closed" in reason
     assert "Approval prompting is not verified" in reason
 
+    audit = tmp_path / "kavach-home" / "events.jsonl"
+    record = json.loads(audit.read_text(encoding="utf-8").splitlines()[0])
+    assert record["verdict"] == "ESCALATE"
+    assert record["execution"] == "blocked"
+
 
 def test_allow_is_the_only_decision_that_permits_tool_execution(tmp_path: Path) -> None:
     with fake_kavach_api(api_result("ALLOW")) as (url, _):
