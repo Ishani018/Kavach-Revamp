@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .navigator2 import Navigator2
-from .schemas import MinisterResult, ToolCall
+from ..schemas import MinisterResult, ToolCall
 
 
 class NavigatorMinister:
