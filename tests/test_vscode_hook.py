@@ -48,6 +48,31 @@ def fake_kavach_api(result: dict[str, Any]) -> Iterator[tuple[str, list[dict[str
         server.server_close()
 
 
+@contextmanager
+def redirecting_server(target_url: str) -> Iterator[str]:
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            size = int(self.headers.get("content-length", "0"))
+            self.rfile.read(size)
+            self.send_response(307)
+            self.send_header("Location", target_url + "/check")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, _format: str, *_args: Any) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield "http://127.0.0.1:%d" % server.server_address[1]
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+
 def run_hook(event: dict[str, Any], tmp_path: Path, api_url: str) -> dict[str, Any]:
     env = os.environ.copy()
     env["KAVACH_LOCAL_API_URL"] = api_url
@@ -239,3 +264,11 @@ def test_post_tool_use_records_execution_without_output_contents(tmp_path: Path)
     contents = audit.read_text(encoding="utf-8")
     assert "EXECUTED" in contents
     assert "PRIVATE_OUTPUT_SHOULD_NOT_PERSIST" not in contents
+
+
+def test_api_redirect_is_not_followed_to_another_host(tmp_path: Path) -> None:
+    with fake_kavach_api(api_result("ALLOW")) as (target_url, target_received):
+        with redirecting_server(target_url) as redirect_url:
+            output = run_hook(pretool_event(), tmp_path, redirect_url)
+    assert decision(output) == "deny"
+    assert target_received == []
