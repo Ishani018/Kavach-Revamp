@@ -88,28 +88,35 @@ def _display_rule(rule_id: str) -> str:
 def _minister_note(name: str, item: dict[str, Any], verdict: str, rule_ids: list[str]) -> str:
     """Summarize each minister without echoing command text, secrets, or destinations."""
     raw_reason = _safe_inline(item.get("reason"))
-    if verdict == "ALLOW" and not rule_ids:
-        # No-hit reasons from the current API are fixed, non-sensitive summaries.
-        if raw_reason and "no rule matched" in raw_reason.lower():
-            return raw_reason
-        if name == "NAVIGATOR":
-            return "No blocking or escalation policy was returned."
-        return {
-            "VAULT": "No credential/secret rule was reported as matched.",
-            "EXECUTOR": "No dangerous-execution rule was reported as matched.",
-            "CHANNEL": "No sensitive-flow/provenance rule was reported as matched.",
-        }.get(name, "No matching rule was reported.")
+
+    if verdict == "ALLOW":
+        if not rule_ids:
+            # No-hit reasons from the current API are fixed, non-sensitive summaries.
+            if raw_reason and "no rule matched" in raw_reason.lower():
+                return raw_reason
+            if name == "NAVIGATOR":
+                return "No blocking or escalation policy was returned."
+            return {
+                "VAULT": "No credential/secret rule was reported as matched.",
+                "EXECUTOR": "No dangerous-execution rule was reported as matched.",
+                "CHANNEL": "No sensitive-flow/provenance rule was reported as matched.",
+            }.get(name, "No matching rule was reported.")
+        return "A rule/provenance check returned ALLOW; raw matched values are withheld."
 
     if name == "VAULT":
-        return "Credential/secret rule matched; matched material is withheld."
-    if name == "EXECUTOR":
+        return "Credential/secret check returned %s; matched material is withheld." % verdict
+    if name == "EXECUTOR" and verdict == "BLOCK":
         return "Dangerous-execution rule matched; raw command excerpt is withheld."
     if name == "CHANNEL":
-        return "Sensitive-data flow/provenance rule triggered; raw values are withheld."
+        return "Sensitive-data flow/provenance check returned %s; raw values are withheld." % verdict
     # NAVIGATOR uses fixed, high-level reasons; its diagnostics contain policy IDs.
-    if raw_reason:
+    if name == "NAVIGATOR" and raw_reason:
         return raw_reason
-    return "NAVIGATOR returned this verdict; see the policy ID above."
+    if verdict == "ESCALATE":
+        return "This minister requested review; raw matched values are withheld."
+    if raw_reason and name not in {"EXECUTOR", "CHANNEL"}:
+        return raw_reason
+    return "This minister returned %s; raw matched values are withheld." % verdict
 
 
 def _decision_report(
