@@ -1,0 +1,6 @@
+# Optional dependencies for the retired embedding/BM25 retrieval experiment only.
+-r requirements.txt
+sentence-transformers>=2.7,<4.0
+chromadb>=0.5,<0.7
+rank-bm25>=0.2.2
+numpy>=1.26,<2.5
