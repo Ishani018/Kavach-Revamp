@@ -279,6 +279,34 @@ def test_malformed_kavach_decision_fails_closed(
     assert reason_fragment in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
 
+@pytest.mark.parametrize(
+    "bad_result",
+    [
+        {"verdict": "ALLOW", "decided_by": "Speaker", "ministers": {}},
+        {
+            "verdict": "ALLOW",
+            "decided_by": "Speaker",
+            "ministers": {
+                "VAULT": {"verdict": "ALLOW"},
+                "EXECUTOR": {"verdict": "BLOCK"},
+                "CHANNEL": {"verdict": "ALLOW"},
+                "NAVIGATOR": {"verdict": "ALLOW"},
+            },
+        },
+    ],
+)
+def test_incomplete_or_inconsistent_minister_results_fail_closed(
+    tmp_path: Path, bad_result: dict[str, Any]
+) -> None:
+    with fake_kavach_api(bad_result) as (url, _):
+        output = run_hook(pretool_event(), tmp_path, url)
+    assert decision(output) == "deny"
+    assert "not allowed to run" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "Kavach returned an incomplete minister breakdown" in output["hookSpecificOutput"]["permissionDecisionReason"] or (
+        "Kavach returned an inconsistent final verdict" in output["hookSpecificOutput"]["permissionDecisionReason"]
+    )
+
+
 def test_api_unavailable_fails_closed(tmp_path: Path) -> None:
     output = run_hook(pretool_event(), tmp_path, "http://127.0.0.1:1")
     assert decision(output) == "deny"
