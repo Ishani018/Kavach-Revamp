@@ -395,8 +395,10 @@ def _handle_pre_tool_use(
         verdict = result.get("verdict")
         if verdict not in VALID_VERDICTS:
             raise RuntimeError("Kavach returned no valid verdict.")
-        reason = result.get("reason")
-        reason = reason.strip() if isinstance(reason, str) and reason.strip() else "No reason provided."
+        # Do not echo the coordinator's top-level reason verbatim: EXECUTOR
+        # match reasons can include command excerpts, and CHANNEL can include
+        # destination-shaped values. The detailed report below applies per-minister
+        # redaction before it is shown or passed back to the model.
         decided_by = result.get("decided_by")
         ministers = result.get("ministers")
         if not isinstance(ministers, dict):
@@ -418,32 +420,39 @@ def _handle_pre_tool_use(
             "verdict": verdict,
             "decided_by": decided_by if isinstance(decided_by, str) else None,
             "minister_summary": minister_summary,
-            "reason": reason[:MAX_REASON_CHARS],
+            "reason": (
+                "Kavach returned ALLOW."
+                if verdict == "ALLOW"
+                else "Kavach returned BLOCK; matched input text omitted."
+                if verdict == "BLOCK"
+                else "Kavach returned ESCALATE; denied fail-closed because approval prompting is unverified."
+            ),
             "execution": "pending" if verdict == "ALLOW" else "blocked",
         })
         try:
             _audit(data_home, record)
         except OSError:
             return _deny("Kavach blocked this call because its private audit log could not be written.")
+        actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
         if verdict == "ALLOW":
             permission = "allow"
-            hook_reason = "Kavach ALLOW: %s" % reason
+            hook_reason = "Kavach ALLOW%s. See the minister report for each check." % actor
         elif verdict == "BLOCK":
             permission = "deny"
-            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
-            hook_reason = "Kavach BLOCK%s: %s" % (actor, reason)
+            hook_reason = (
+                "Kavach BLOCK%s. See the minister report for exact rule IDs; "
+                "matched command/secret text is withheld."
+            ) % actor
         else:
             # VS Code 1.141.0 did not surface an approval prompt for native
             # "ask" in the live Local-harness test; the tool ran after an
             # ESCALATE. Fail closed until that host behavior is independently
             # verified, rather than treating ask as a reliable security gate.
             permission = "deny"
-            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
             hook_reason = (
-                "Kavach ESCALATE%s: %s. Approval prompting is not verified in this "
-                "VS Code session, so this call was denied fail-closed."
-                % (actor, reason)
-            )
+                "Kavach ESCALATE%s. Approval prompting is not verified, so this "
+                "call was denied fail-closed. See the minister report for details."
+            ) % actor
         report = _decision_report(
             result,
             tool_name=tool_name,
