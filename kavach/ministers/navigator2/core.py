@@ -25,7 +25,7 @@ from .ledger import SessionEventLedger
 from .policy import PolicyEngine, PolicyFacts
 from .invariant_policy import InvariantPolicyEngine
 from .reasoner import DeterministicMockProvider, ReasonerFabricationError, TrajectoryReasonerProvider, validate_response
-from .schemas import EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
+from .schemas import ConfidentialityLabel, EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
 from . import verdict as verdict_mod
 
 # No LLM, no network call, and no mandatory external dependency is reachable
@@ -50,6 +50,50 @@ _WRITE_HINT_TEXT = re.compile(r">>|>\s|^\s*rm\s|^\s*mv\s|\brm\s+-", re.IGNORECAS
 # trust boundary enforcement itself lives in contract.py, not here.
 _IGNORE_PRIOR_RE = re.compile(r"\b(ignore|disregard)\b.{0,20}\b(previous|prior|earlier)\b.{0,20}\binstruction", re.IGNORECASE)
 _FORWARD_TO_RE = re.compile(r"\b(forward|send|email|copy)\b.{0,30}\bto\b", re.IGNORECASE)
+
+
+
+def _classify_artifact_confidentiality(paths: List[str]) -> Optional[ConfidentialityLabel]:
+    """Conservatively classify extracted artifact PATHS, not arbitrary text keywords.
+
+    This is a heuristic path classifier, not content inspection or byte-level taint.
+    """
+    segments = [
+        segment
+        for path in paths
+        for segment in path.replace("\\", "/").lower().split("/")
+        if segment
+    ]
+    secret_names = {
+        ".ssh", ".aws", ".env", "id_rsa", "id_ed25519", "id_ecdsa",
+        "passwd", "shadow", "secrets.json", "credentials.json",
+    }
+    secret_fragments = (
+        "credential", "private_key", "private-key", "api_key", "api-key",
+        "access_token", "refresh_token", "password", "secret", ".pem",
+        ".p12", ".pfx",
+    )
+    if any(
+        segment in secret_names or any(fragment in segment for fragment in secret_fragments)
+        for segment in segments
+    ):
+        return ConfidentialityLabel.SECRET
+
+    private_names = {
+        "hr", "private", "personal", "medical", "patient", "payroll",
+        "salary", "salaries", "customer", "customers", "bank", "invoice",
+        "invoices", "employee", "employees", "pii", "user_data", "userdata",
+    }
+    private_fragments = (
+        "payroll", "salary", "salaries", "customer_data", "personal_data",
+        "medical_record", "patient_data", "employee_data", "user_data",
+    )
+    if any(
+        segment in private_names or any(fragment in segment for fragment in private_fragments)
+        for segment in segments
+    ):
+        return ConfidentialityLabel.PRIVATE
+    return None
 
 
 def _summarize_args(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -207,7 +251,12 @@ class Navigator2:
         history_gap = not self.ledger.check_parents(session_id, parents)
 
         tag = provenance.compute_label(call, legacy_verdicts)
-        propagated_confidentiality = self._propagate_confidentiality(tag.confidentiality, parents)
+        reads, writes = _extract_artifacts(call)
+        path_confidentiality = _classify_artifact_confidentiality(reads)
+        base_confidentiality = tag.confidentiality
+        if path_confidentiality is not None:
+            base_confidentiality = merge_confidentiality(base_confidentiality, path_confidentiality)
+        propagated_confidentiality = self._propagate_confidentiality(base_confidentiality, parents)
         if source_kind is None:
             ctx = call.context or {}
             if isinstance(ctx.get("tool_output"), str) and ctx["tool_output"].strip():
@@ -217,7 +266,6 @@ class Navigator2:
             else:
                 source_kind = "unknown"
 
-        reads, writes = _extract_artifacts(call)
         destinations = evidence_mod.extract_destinations(call)
 
         event = SessionEvent(
