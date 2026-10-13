@@ -53,7 +53,7 @@ Optional `context` keys used by CHANNEL: `account_email`, `user_instruction`, `t
 ## Tests
 
 ```bash
-pytest tests -q                       # 59 tests; loads the real NAVIGATOR (~10 s with a warm model cache)
+pytest tests -q                       # minister/API/NAVIGATOR and shadow-mode regression suites; no BGE download
 python -m tests.test_struct_parse     # script-style suites inherited from the research code
 python -m tests.test_ast_parse
 ```
