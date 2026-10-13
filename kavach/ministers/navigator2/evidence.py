@@ -17,8 +17,10 @@ policy.py's POL-007).
 
 from __future__ import annotations
 
+import ast
 import os
 import re
+import shlex
 from typing import Dict, List, Optional
 
 from .. import ast_parse
@@ -38,9 +40,91 @@ _POWERSHELL_DIALECTS = frozenset({"powershell"})
 _TERMINAL_WRAPPER_NAMES = frozenset({"run_in_terminal", "runinterminal", "run_terminal"})
 # zsh and dash use a POSIX-compatible parser approximation, never claimed as full coverage.
 _POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
-# Restrict the approximation to simple portable commands. Metacharacters,
-# substitutions, quoting, redirections, and command chaining remain indeterminate.
+# Fast path for unquoted, simple portable commands.
 _SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
+_SHELL_CONTROL_CHARS = frozenset("|&;<>$\x60*?[]{}()")
+
+def _quoted_command_has_no_shell_control_syntax(command: str) -> bool:
+    """Permit ordinary quoting only when it cannot hide shell expansion/control flow.
+
+    This is deliberately a small lexer, not a shell parser. bashlex must also
+    successfully parse the call; this check only distinguishes literal quotes
+    from unquoted operators and shell expansions in the zsh/dash approximation.
+    """
+    quote = None
+    escaped = False
+    for char in command.strip():
+        if escaped:
+            escaped = False
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = None
+            continue
+        if quote == '"':
+            if char == "\\":
+                escaped = True
+            elif char == '"':
+                quote = None
+            elif char in "$\x60":
+                return False
+            continue
+        if char == "\\":
+            escaped = True
+        elif char in ("'", '"'):
+            quote = char
+        elif char in _SHELL_CONTROL_CHARS or char in "\\r\\n":
+            return False
+    return quote is None and not escaped
+
+
+def _python_inline_code_is_static_print(words: List[str]) -> bool:
+    """Recognize only literal-only Python -c print statements as harmless.
+
+    A shell AST alone says nothing about the meaning of code passed to an
+    interpreter. This strict subset is just enough for the benign print demo;
+    imports, attribute calls, assignments, dynamic values, and all other code
+    remain indeterminate and continue to fail closed.
+    """
+    if not words:
+        return False
+    executable = words[0].replace("\\\\", "/").rsplit("/", 1)[-1].lower()
+    if not re.fullmatch(r"python(?:3(?:\\.\\d+)?)?", executable):
+        return True
+    if "-c" not in words[1:]:
+        return True
+    code_index = words.index("-c") + 1
+    if code_index >= len(words):
+        return False
+    try:
+        parsed = ast.parse(words[code_index])
+    except (SyntaxError, ValueError, TypeError):
+        return False
+    if not parsed.body:
+        return False
+    for statement in parsed.body:
+        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+            return False
+        call = statement.value
+        if not isinstance(call.func, ast.Name) or call.func.id != "print" or call.keywords:
+            return False
+        if not all(isinstance(argument, ast.Constant) for argument in call.args):
+            return False
+    return True
+
+
+def _is_simple_terminal_command(command: str) -> bool:
+    """Return true only for a single, parseable command in a constrained subset."""
+    stripped = command.strip()
+    if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(stripped):
+        return True
+    if not stripped or not _quoted_command_has_no_shell_control_syntax(stripped):
+        return False
+    try:
+        words = shlex.split(stripped, posix=True)
+    except ValueError:
+        return False
+    return bool(words) and _python_inline_code_is_static_print(words)
 
 _DECODE_COMMANDS = re.compile(r"^(base64|base32|base16|xxd)$", re.IGNORECASE)
 _DECODE_FLAG = re.compile(r"^-?-?d(ecode)?$", re.IGNORECASE)
@@ -125,15 +209,16 @@ class ShellEvidenceModule(EvidenceModule):
         extracted = ast_parse.extract_words(cmd, parser_dialect)
         if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
             # bashlex is only a POSIX-compatible approximation for zsh/dash.
-            # Call it useful coverage only for a simple command with no shell
-            # metacharacters. Chaining, substitutions, quoting, and redirects
-            # remain indeterminate rather than being silently treated as safe.
-            if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(cmd.strip()):
+            # Quoted arguments are accepted only when unquoted shell control/
+            # expansion syntax is absent. Inline Python -c code is narrower:
+            # only literal-only print() expressions qualify; other code remains
+            # indeterminate even if its outer shell command parses cleanly.
+            if _is_simple_terminal_command(cmd):
                 coverage = "partial"
                 claim = (
                     f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
                     f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
-                    "simple portable syntax only"
+                    "constrained single-command syntax only"
                 )
                 confidence = 0.65
             else:
