@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 MAX_STDIN_BYTES = 2 * 1024 * 1024
 MAX_PROMPT_CHARS = 12_000
@@ -26,6 +26,15 @@ MAX_REASON_CHARS = 500
 CONTEXT_TTL_SECONDS = 8 * 60 * 60
 DEFAULT_API_URL = "http://127.0.0.1:8088"
 API_TIMEOUT_SECONDS = 5.0
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Never forward tool arguments to a redirected URL, even from loopback."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_LOCAL_OPENER = build_opener(ProxyHandler({}), _NoRedirectHandler())
 VALID_VERDICTS = {"ALLOW", "BLOCK", "ESCALATE"}
 
 
@@ -143,7 +152,7 @@ def _post_check(payload: dict[str, Any]) -> dict[str, Any]:
         method="POST",
     )
     try:
-        with urlopen(request, timeout=API_TIMEOUT_SECONDS) as response:
+        with _LOCAL_OPENER.open(request, timeout=API_TIMEOUT_SECONDS) as response:
             if not 200 <= response.status < 300:
                 raise RuntimeError("Kavach local API returned a non-success response.")
             result = json.loads(response.read(1024 * 1024).decode("utf-8"))
