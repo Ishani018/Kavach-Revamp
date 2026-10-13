@@ -272,3 +272,18 @@ def test_api_redirect_is_not_followed_to_another_host(tmp_path: Path) -> None:
             output = run_hook(pretool_event(), tmp_path, redirect_url)
     assert decision(output) == "deny"
     assert target_received == []
+
+
+def test_audit_write_failure_blocks_allow_verdict(tmp_path: Path) -> None:
+    # Make events.jsonl a directory so the audit append definitely fails.
+    (tmp_path / "kavach-home" / "events.jsonl").mkdir(parents=True)
+    with fake_kavach_api(api_result("ALLOW")) as (url, _):
+        output = run_hook(pretool_event(), tmp_path, url)
+    assert decision(output) == "deny"
+    assert "audit log could not be written" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_unknown_hook_event_does_not_implicitly_continue(tmp_path: Path) -> None:
+    output = run_hook({"session_id": "vscode-session-01", "prompt": "ignored"}, tmp_path, "http://127.0.0.1:1")
+    assert decision(output) == "deny"
+    assert "missing or unsupported" in output["hookSpecificOutput"]["permissionDecisionReason"]
