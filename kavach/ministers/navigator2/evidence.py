@@ -73,7 +73,7 @@ def _quoted_command_has_no_shell_control_syntax(command: str) -> bool:
             escaped = True
         elif char in ("'", '"'):
             quote = char
-        elif char in _SHELL_CONTROL_CHARS or char in "\\r\\n":
+        elif char in _SHELL_CONTROL_CHARS or char in "\r\n":
             return False
     return quote is None and not escaped
 
@@ -88,8 +88,8 @@ def _python_inline_code_is_static_print(words: List[str]) -> bool:
     """
     if not words:
         return False
-    executable = words[0].replace("\\\\", "/").rsplit("/", 1)[-1].lower()
-    if not re.fullmatch(r"python(?:3(?:\\.\\d+)?)?", executable):
+    executable = words[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if not re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable):
         return True
     if "-c" not in words[1:]:
         return True
