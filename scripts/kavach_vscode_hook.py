@@ -36,6 +36,135 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 
 _LOCAL_OPENER = build_opener(ProxyHandler({}), _NoRedirectHandler())
 VALID_VERDICTS = {"ALLOW", "BLOCK", "ESCALATE"}
+MINISTER_ORDER = ("VAULT", "EXECUTOR", "CHANNEL", "NAVIGATOR")
+MAX_REPORT_CHARS = 3_500
+MAX_MINISTER_NOTE_CHARS = 220
+NAVIGATOR_POLICY_TITLES = {
+    "POL-001": "proven-exfil-to-unauthorized-destination",
+    "POL-002": "contract-scope-violation",
+    "POL-003": "untrusted-content-privilege-induction",
+    "POL-004": "decode-execute-structural",
+    "POL-005": "specialist-hard-block-preserved",
+    "POL-006": "high-impact-without-approval",
+    "POL-007": "insufficient-evidence-coverage",
+    "POL-008": "explicit-task-restriction-violation",
+    "POL-009": "prior-sensitive-artifact-to-unauthorized-destination",
+}
+
+
+def _safe_inline(value: Any, limit: int = MAX_MINISTER_NOTE_CHARS) -> str:
+    """Collapse and cap server-provided text before displaying it to a user."""
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.replace("\r", " ").replace("\n", " ").replace("\t", " ").split())
+    text = "".join(ch for ch in normalized if ch.isprintable())
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: max(0, limit - 1)] + "…"
+
+
+def _rule_ids(item: dict[str, Any]) -> list[str]:
+    """Extract stable rule/policy identifiers without exposing matched input."""
+    found: list[str] = []
+    matched = item.get("matched_id")
+    if isinstance(matched, str) and matched.strip():
+        found.append(matched.strip()[:160])
+    diagnostics = item.get("diagnostics")
+    if isinstance(diagnostics, dict):
+        policy_ids = diagnostics.get("policy_ids")
+        if isinstance(policy_ids, list):
+            for value in policy_ids:
+                if isinstance(value, str) and value.strip() and value.strip() not in found:
+                    found.append(value.strip()[:160])
+    return found[:6]
+
+
+def _display_rule(rule_id: str) -> str:
+    """Add a human-readable title for NAVIGATOR policy IDs when known."""
+    for policy_id, title in NAVIGATOR_POLICY_TITLES.items():
+        if rule_id == policy_id:
+            return f"{policy_id} ({title})"
+    return rule_id
+
+
+def _minister_note(name: str, item: dict[str, Any], verdict: str, rule_ids: list[str]) -> str:
+    """Summarize each minister without echoing command text, secrets, or destinations."""
+    raw_reason = _safe_inline(item.get("reason"))
+
+    if verdict == "ALLOW":
+        if not rule_ids:
+            # No-hit reasons from the current API are fixed, non-sensitive summaries.
+            if raw_reason and "no rule matched" in raw_reason.lower():
+                return raw_reason
+            if name == "NAVIGATOR":
+                return "No blocking or escalation policy was returned."
+            return {
+                "VAULT": "No credential/secret rule was reported as matched.",
+                "EXECUTOR": "No dangerous-execution rule was reported as matched.",
+                "CHANNEL": "No sensitive-flow/provenance rule was reported as matched.",
+            }.get(name, "No matching rule was reported.")
+        return "A rule/provenance check returned ALLOW; raw matched values are withheld."
+
+    if name == "VAULT":
+        return "Credential/secret check returned %s; matched material is withheld." % verdict
+    if name == "EXECUTOR" and verdict == "BLOCK":
+        return "Dangerous-execution rule matched; raw command excerpt is withheld."
+    if name == "CHANNEL":
+        return "Sensitive-data flow/provenance check returned %s; raw values are withheld." % verdict
+    # NAVIGATOR uses fixed, high-level reasons; its diagnostics contain policy IDs.
+    if name == "NAVIGATOR" and raw_reason:
+        return raw_reason
+    if verdict == "ESCALATE":
+        return "This minister requested review; raw matched values are withheld."
+    if raw_reason and name not in {"EXECUTOR", "CHANNEL"}:
+        return raw_reason
+    return "This minister returned %s; raw matched values are withheld." % verdict
+
+
+def _decision_report(
+    result: dict[str, Any],
+    *,
+    tool_name: str,
+    permission: str,
+    decided_by: Any,
+) -> str:
+    """Format a readable, privacy-aware, user-visible report for VS Code Local."""
+    verdict = result.get("verdict")
+    verdict = verdict if verdict in VALID_VERDICTS else "UNKNOWN"
+    actor = _safe_inline(decided_by, 80) or "not reported"
+    if permission == "allow":
+        action_line = "Enforcement action: ALLOW — Kavach returned ALLOW."
+    elif verdict == "BLOCK":
+        action_line = "Enforcement action: DENY — Kavach returned BLOCK."
+    elif verdict == "ESCALATE":
+        action_line = "Enforcement action: DENY — fail-closed because interactive approval is not verified."
+    else:
+        action_line = "Enforcement action: DENY."
+
+    lines = [
+        "KAVACH PRE-TOOL REVIEW",
+        "Tool: " + (_safe_inline(tool_name, 128) or "unknown"),
+        f"Policy verdict: {verdict} (decided by {actor})",
+        action_line,
+        "Minister breakdown (raw command text, secret values, and destinations are withheld):",
+    ]
+    ministers = result.get("ministers")
+    if not isinstance(ministers, dict):
+        ministers = {}
+    for name in MINISTER_ORDER:
+        item = ministers.get(name)
+        if not isinstance(item, dict):
+            lines.append(f"- {name}: NO RESULT | Rule: none reported | Reason: minister result missing.")
+            continue
+        minister_verdict = item.get("verdict")
+        minister_verdict = minister_verdict if minister_verdict in VALID_VERDICTS else "UNKNOWN"
+        ids = _rule_ids(item)
+        rule_text = "; ".join(_display_rule(rule_id) for rule_id in ids) if ids else "no specific rule ID reported"
+        note = _minister_note(name, item, minister_verdict, ids)
+        lines.append(f"- {name}: {minister_verdict} | Rule: {rule_text} | Reason: {note}")
+    report = "\n".join(lines)
+    return report[:MAX_REPORT_CHARS]
+
+
 
 
 def _now() -> str:
@@ -214,7 +343,13 @@ def _audit_base(event: dict[str, Any], *, data_home: Path, tool_name: str) -> di
     }
 
 
-def _hook_decision(decision: str, reason: str, *, additional_context: str | None = None) -> dict[str, Any]:
+def _hook_decision(
+    decision: str,
+    reason: str,
+    *,
+    additional_context: str | None = None,
+    system_message: str | None = None,
+) -> dict[str, Any]:
     output: dict[str, Any] = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -223,12 +358,16 @@ def _hook_decision(decision: str, reason: str, *, additional_context: str | None
         }
     }
     if additional_context:
-        output["hookSpecificOutput"]["additionalContext"] = additional_context[:MAX_REASON_CHARS]
+        output["hookSpecificOutput"]["additionalContext"] = additional_context[:MAX_REPORT_CHARS]
+    if system_message:
+        # Local hooks render this as a user-visible message; additionalContext
+        # separately gives the model the same safe summary for its explanation.
+        output["systemMessage"] = system_message[:MAX_REPORT_CHARS]
     return output
 
 
 def _deny(reason: str) -> dict[str, Any]:
-    return _hook_decision("deny", reason)
+    return _hook_decision("deny", reason, system_message=reason)
 
 
 def _handle_pre_tool_use(
@@ -261,25 +400,44 @@ def _handle_pre_tool_use(
     fingerprint = _fingerprint(tool_name, tool_input)
     try:
         result = api_call(payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("Kavach returned an invalid decision.")
         verdict = result.get("verdict")
         if verdict not in VALID_VERDICTS:
             raise RuntimeError("Kavach returned no valid verdict.")
-        reason = result.get("reason")
-        reason = reason.strip() if isinstance(reason, str) and reason.strip() else "No reason provided."
-        decided_by = result.get("decided_by")
         ministers = result.get("ministers")
-        if not isinstance(ministers, dict):
-            ministers = {}
+        if not isinstance(ministers, dict) or set(ministers) != set(MINISTER_ORDER):
+            raise RuntimeError("Kavach returned an incomplete minister breakdown.")
+        minister_verdicts: list[str] = []
+        for name in MINISTER_ORDER:
+            item = ministers.get(name)
+            minister_verdict = item.get("verdict") if isinstance(item, dict) else None
+            if minister_verdict not in VALID_VERDICTS:
+                raise RuntimeError("Kavach returned an invalid minister verdict.")
+            minister_verdicts.append(minister_verdict)
+        expected_verdict = (
+            "BLOCK" if "BLOCK" in minister_verdicts
+            else "ESCALATE" if "ESCALATE" in minister_verdicts
+            else "ALLOW"
+        )
+        if verdict != expected_verdict:
+            raise RuntimeError("Kavach returned an inconsistent final verdict.")
+        # Do not echo the coordinator's top-level reason verbatim: EXECUTOR
+        # match reasons can include command excerpts, and CHANNEL can include
+        # destination-shaped values. The detailed report below applies per-minister
+        # redaction before it is shown or passed back to the model.
+        decided_by = result.get("decided_by")
+        # The response was validated above; all four entries must be present.
         minister_summary = []
-        for name in ("VAULT", "EXECUTOR", "CHANNEL", "NAVIGATOR"):
+        for name in MINISTER_ORDER:
             item = ministers.get(name)
             if isinstance(item, dict):
                 value = item.get("verdict")
-                matched = item.get("matched_id")
+                rule_ids = _rule_ids(item)
                 if isinstance(value, str):
                     part = name + "=" + value
-                    if isinstance(matched, str) and matched:
-                        part += " (" + matched[:80] + ")"
+                    if rule_ids:
+                        part += " (" + "; ".join(rule_ids)[:200] + ")"
                     minister_summary.append(part)
         record = _audit_base(event, data_home=data_home, tool_name=tool_name)
         record.update({
@@ -287,33 +445,51 @@ def _handle_pre_tool_use(
             "verdict": verdict,
             "decided_by": decided_by if isinstance(decided_by, str) else None,
             "minister_summary": minister_summary,
-            "reason": reason[:MAX_REASON_CHARS],
+            "reason": (
+                "Kavach returned ALLOW."
+                if verdict == "ALLOW"
+                else "Kavach returned BLOCK; matched input text omitted."
+                if verdict == "BLOCK"
+                else "Kavach returned ESCALATE; denied fail-closed because approval prompting is unverified."
+            ),
             "execution": "pending" if verdict == "ALLOW" else "blocked",
         })
         try:
             _audit(data_home, record)
         except OSError:
             return _deny("Kavach blocked this call because its private audit log could not be written.")
+        actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
         if verdict == "ALLOW":
             permission = "allow"
-            hook_reason = "Kavach ALLOW: %s" % reason
+            hook_reason = "Kavach ALLOW%s. See the minister report for each check." % actor
         elif verdict == "BLOCK":
             permission = "deny"
-            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
-            hook_reason = "Kavach BLOCK%s: %s" % (actor, reason)
+            hook_reason = (
+                "Kavach BLOCK%s. See the minister report for exact rule IDs; "
+                "matched command/secret text is withheld."
+            ) % actor
         else:
             # VS Code 1.141.0 did not surface an approval prompt for native
             # "ask" in the live Local-harness test; the tool ran after an
             # ESCALATE. Fail closed until that host behavior is independently
             # verified, rather than treating ask as a reliable security gate.
             permission = "deny"
-            actor = " by " + decided_by if isinstance(decided_by, str) and decided_by else ""
             hook_reason = (
-                "Kavach ESCALATE%s: %s. Approval prompting is not verified in this "
-                "VS Code session, so this call was denied fail-closed."
-                % (actor, reason)
-            )
-        return _hook_decision(permission, hook_reason)
+                "Kavach ESCALATE%s. Approval prompting is not verified, so this "
+                "call was denied fail-closed. See the minister report for details."
+            ) % actor
+        report = _decision_report(
+            result,
+            tool_name=tool_name,
+            permission=permission,
+            decided_by=decided_by,
+        )
+        return _hook_decision(
+            permission,
+            hook_reason,
+            additional_context=report,
+            system_message=report,
+        )
     except Exception as exc:
         # Never include request bodies, raw arguments, or upstream response
         # bodies in the hook output; only safe, fixed failure messages escape.

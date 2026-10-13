@@ -16,6 +16,12 @@ VS Code agent hooks are currently a Preview feature. This first integration inte
 - **scripts/kavach_vscode_hook.py**: stdlib-only hook bridge. It reads hook JSON from stdin and writes VS Code's documented JSON decision to stdout.
 - **.github/hooks/kavach.json**: registers prompt, pre-tool, and post-tool hooks.
 - **POST /check**: existing coordinator API; no new cloud endpoint is needed.
+
+## What appears in VS Code chat
+
+Each evaluated tool call produces a user-visible `systemMessage` headed **KAVACH PRE-TOOL REVIEW**. It shows the tool name, overall policy verdict and deciding minister, the actual enforcement action, and a separate line for **VAULT**, **EXECUTOR**, **CHANNEL**, and **NAVIGATOR**. Where provided by the API, it includes exact `matched_id` values and NAVIGATOR policy IDs with their names (for example, `POL-007 (insufficient-evidence-coverage)`). The same report is also supplied through `hookSpecificOutput.additionalContext` so the agent can explain the check in its response.
+
+The report deliberately does not print raw command excerpts, secret values, or destination strings. For sensitive matches it shows a safe explanation plus the exact rule ID instead. If a minister omits a rule ID or explanation, the report says so rather than inventing one. API failures still fail closed and show the error reason, but no minister report is possible if the API did not return a valid result.
 - **~/.kavach-vscode/events.jsonl**: private, local audit log. It records timestamps, hashed session/tool-call IDs, tool names, fingerprints, verdicts, and successful post-tool outcomes. It **does not** persist raw tool arguments, prompt text, or tool output.
 - **~/.kavach-vscode/contexts/**: stores the latest user prompt for each session locally, with restrictive file permissions and an eight-hour expiry. This is used only as **context.user_instruction** for the same session; tool output is never treated as trusted instruction.
 
