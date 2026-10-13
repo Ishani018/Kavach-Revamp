@@ -23,6 +23,7 @@ from . import provenance
 from .contract import TaskContractStore, UntrustedRevisionAttempt
 from .ledger import SessionEventLedger
 from .policy import PolicyEngine, PolicyFacts
+from .invariant_policy import InvariantPolicyEngine
 from .reasoner import DeterministicMockProvider, ReasonerFabricationError, TrajectoryReasonerProvider, validate_response
 from .schemas import EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
 from . import verdict as verdict_mod
@@ -109,7 +110,8 @@ class Navigator2:
     ) -> None:
         self.contract_store = contract_store or TaskContractStore()
         self.ledger = ledger or SessionEventLedger()
-        self.policy_engine = policy_engine or PolicyEngine()
+        # Active runtime policy evaluation uses the upstream Invariant LocalPolicy interpreter.
+        self.policy_engine = policy_engine or InvariantPolicyEngine()
         # Default is DeterministicMockProvider -- a rule-based fixture, never
         # an LLM (see reasoner.py's module docstring). No provider shipped in
         # this package makes a network call or requires an API key.
@@ -245,6 +247,7 @@ class Navigator2:
             evidence=findings, legacy_minister_results=legacy_verdicts, destinations=destinations,
             untrusted_revision_attempted=untrusted_revision_attempted,
             untrusted_revision_fields=untrusted_revision_fields,
+            session_history=prior_events,
         )
         policy_decisions = self.policy_engine.evaluate_all(facts)
 
@@ -318,6 +321,7 @@ class Navigator2:
         result = verdict_mod.compose(
             session_id=session_id, event_id=event_id, contract=contract, policy_decisions=policy_decisions,
             reasoner_output=reasoner_output, reasoner_invoked=reasoner_invoked,
+            policy_version=getattr(self.policy_engine, "ENGINE_VERSION", PolicyEngine.ENGINE_VERSION),
             reasoner_timed_out=reasoner_timed_out, reasoner_rejected=reasoner_rejected,
             legacy_minister_results=legacy_verdicts, evidence=findings,
         )

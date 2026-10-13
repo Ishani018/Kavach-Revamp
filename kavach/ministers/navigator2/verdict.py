@@ -31,6 +31,7 @@ def compose(
     evidence: List[EvidenceFinding],
     reasoner_timed_out: bool = False,
     reasoner_rejected: bool = False,
+    policy_version: Optional[str] = None,
 ) -> Navigator2Verdict:
     reasoner_capped = False
 
@@ -69,7 +70,7 @@ def compose(
         event_id=event_id,
         disposition=disposition,
         requires_approval=requires_approval,
-        policy_version=PolicyEngine.ENGINE_VERSION,
+        policy_version=policy_version or PolicyEngine.ENGINE_VERSION,
         contract_version=contract.version,
         policy_decisions=policy_decisions,
         reasoner_output=reasoner_output,

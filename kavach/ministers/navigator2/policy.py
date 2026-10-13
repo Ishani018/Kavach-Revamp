@@ -30,6 +30,8 @@ class PolicyFacts:
     destinations: List[str] = field(default_factory=list)
     untrusted_revision_attempted: bool = False
     untrusted_revision_fields: Dict[str, Any] = field(default_factory=dict)
+    # Complete earlier session history from the append-only ledger.
+    session_history: List[SessionEvent] = field(default_factory=list)
 
 
 class Policy:
