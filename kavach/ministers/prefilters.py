@@ -34,7 +34,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-from .retrieval import MinisterScan
+from .scan import MinisterScan
 from . import struct_parse
 from . import ast_parse
 

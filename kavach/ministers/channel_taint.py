@@ -102,7 +102,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .retrieval import MinisterScan
+from .scan import MinisterScan
 from .prefilters import ParsedCall, parse_call, _flatten_arg_values
 
 

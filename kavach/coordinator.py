@@ -39,7 +39,7 @@ class Coordinator:
 
         results: Dict[str, MinisterResult] = {}
         for m in self._ministers:
-            results[m.name] = self._run(m, call)
+            results[m.name] = self._run(m, call, prior_results=results)
 
         sv = speaker.decide(results.values())
         return Decision(
@@ -51,9 +51,13 @@ class Coordinator:
         )
 
     @staticmethod
-    def _run(minister: Any, call: ToolCall) -> MinisterResult:
+    def _run(minister: Any, call: ToolCall, prior_results=None) -> MinisterResult:
         try:
-            r = minister.check(call)
+            contextual_check = getattr(minister, "check_with_context", None)
+            if callable(contextual_check):
+                r = contextual_check(call, dict(prior_results or {}))
+            else:
+                r = minister.check(call)
         except Exception as e:
             log.error("minister %s raised %s; failing closed", minister.name, type(e).__name__)
             return _failure(minister.name, f"raised {type(e).__name__}")

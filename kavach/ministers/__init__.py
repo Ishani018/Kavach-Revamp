@@ -1,11 +1,13 @@
-"""The four ministers. Each exposes `name` and `check(ToolCall) -> MinisterResult`."""
+"""The four ministers. Each exposes name and check(ToolCall) -> MinisterResult."""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from ..schemas import MinisterResult
-from .retrieval import MinisterScan
+
+if TYPE_CHECKING:
+    from .retrieval import MinisterScan
 
 MAX_REASON = 300
 
@@ -34,3 +36,11 @@ def scan_to_result(scan: Optional[MinisterScan], name: str, *, redact_match: boo
             "mode": scan.retrieval_mode,
         },
     )
+
+
+def __getattr__(name: str):
+    """Load the legacy embedding/BM25 result type only when explicitly requested."""
+    if name == "MinisterScan":
+        from .scan import MinisterScan
+        return MinisterScan
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

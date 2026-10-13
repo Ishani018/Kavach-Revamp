@@ -32,9 +32,9 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
 from typing import Callable
 
+from .scan import MinisterScan
 import numpy as np
 
 # rank_bm25 is a lightweight pure-Python BM25 implementation.
@@ -47,22 +47,9 @@ except ImportError:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Result type
-# ──────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class MinisterScan:
-    minister:      str
-    verdict:       str            # "BLOCK" | "ESCALATE" | "ALLOW"
-    confidence:    float          # RRF-fused score (or raw cosine if BM25 unavailable)
-    matched_id:    str | None
-    matched_text:  str | None
-    matched_level: str | None     # "L1" | "L2" | "L3"
-    source:        str | None = None   # corpus pattern source for provenance
-    retrieval_mode: str = "dense"      # "dense" | "hybrid"
+# Result type is defined in scan.py to avoid making its import require NumPy.
 
 
-# ──────────────────────────────────────────────────────────────────────────────
 # BM25 index builder  (called once at startup by navigator.py)
 # ──────────────────────────────────────────────────────────────────────────────
 

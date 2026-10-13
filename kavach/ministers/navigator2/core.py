@@ -6,8 +6,9 @@ Navigator2 orchestrator: wires Components 1-7 together for one proposed
 ToolCall. See docs/navigator2-architecture.md SS2 for the data-flow diagram
 this function implements.
 
-This class is never imported by kavach/coordinator.py. It is only ever
-constructed and called by shadow.py (or directly, by tests/episodes.py).
+On the navigator-invariant-runtime branch, NavigatorMinister constructs
+this orchestrator in the active NAVIGATOR verdict path. ShadowRunner remains
+available for isolated regression/evaluation comparisons.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ from . import provenance
 from .contract import TaskContractStore, UntrustedRevisionAttempt
 from .ledger import SessionEventLedger
 from .policy import PolicyEngine, PolicyFacts
+from .invariant_policy import InvariantPolicyEngine
 from .reasoner import DeterministicMockProvider, ReasonerFabricationError, TrajectoryReasonerProvider, validate_response
-from .schemas import EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
+from .schemas import ConfidentialityLabel, EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
 from . import verdict as verdict_mod
 
 # No LLM, no network call, and no mandatory external dependency is reachable
@@ -49,6 +51,50 @@ _WRITE_HINT_TEXT = re.compile(r">>|>\s|^\s*rm\s|^\s*mv\s|\brm\s+-", re.IGNORECAS
 # trust boundary enforcement itself lives in contract.py, not here.
 _IGNORE_PRIOR_RE = re.compile(r"\b(ignore|disregard)\b.{0,20}\b(previous|prior|earlier)\b.{0,20}\binstruction", re.IGNORECASE)
 _FORWARD_TO_RE = re.compile(r"\b(forward|send|email|copy)\b.{0,30}\bto\b", re.IGNORECASE)
+
+
+
+def _classify_artifact_confidentiality(paths: List[str]) -> Optional[ConfidentialityLabel]:
+    """Conservatively classify extracted artifact PATHS, not arbitrary text keywords.
+
+    This is a heuristic path classifier, not content inspection or byte-level taint.
+    """
+    segments = [
+        segment
+        for path in paths
+        for segment in path.replace("\\", "/").lower().split("/")
+        if segment
+    ]
+    secret_names = {
+        ".ssh", ".aws", ".env", "id_rsa", "id_ed25519", "id_ecdsa",
+        "passwd", "shadow", "secrets.json", "credentials.json",
+    }
+    secret_fragments = (
+        "credential", "private_key", "private-key", "api_key", "api-key",
+        "access_token", "refresh_token", "password", "secret", ".pem",
+        ".p12", ".pfx",
+    )
+    if any(
+        segment in secret_names or any(fragment in segment for fragment in secret_fragments)
+        for segment in segments
+    ):
+        return ConfidentialityLabel.SECRET
+
+    private_names = {
+        "hr", "private", "personal", "medical", "patient", "payroll",
+        "salary", "salaries", "customer", "customers", "bank", "invoice",
+        "invoices", "employee", "employees", "pii", "user_data", "userdata",
+    }
+    private_fragments = (
+        "payroll", "salary", "salaries", "customer_data", "personal_data",
+        "medical_record", "patient_data", "employee_data", "user_data",
+    )
+    if any(
+        segment in private_names or any(fragment in segment for fragment in private_fragments)
+        for segment in segments
+    ):
+        return ConfidentialityLabel.PRIVATE
+    return None
 
 
 def _summarize_args(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -101,7 +147,7 @@ class Navigator2:
         *,
         contract_store: Optional[TaskContractStore] = None,
         ledger: Optional[SessionEventLedger] = None,
-        policy_engine: Optional[PolicyEngine] = None,
+        policy_engine: Optional[Any] = None,
         reasoner_provider: Optional[TrajectoryReasonerProvider] = None,
         evidence_modules: Optional[list] = None,
         relevant_event_window: int = 20,
@@ -109,7 +155,8 @@ class Navigator2:
     ) -> None:
         self.contract_store = contract_store or TaskContractStore()
         self.ledger = ledger or SessionEventLedger()
-        self.policy_engine = policy_engine or PolicyEngine()
+        # Active runtime policy evaluation uses the upstream Invariant LocalPolicy interpreter.
+        self.policy_engine = policy_engine or InvariantPolicyEngine()
         # Default is DeterministicMockProvider -- a rule-based fixture, never
         # an LLM (see reasoner.py's module docstring). No provider shipped in
         # this package makes a network call or requires an API key.
@@ -205,7 +252,12 @@ class Navigator2:
         history_gap = not self.ledger.check_parents(session_id, parents)
 
         tag = provenance.compute_label(call, legacy_verdicts)
-        propagated_confidentiality = self._propagate_confidentiality(tag.confidentiality, parents)
+        reads, writes = _extract_artifacts(call)
+        path_confidentiality = _classify_artifact_confidentiality(reads)
+        base_confidentiality = tag.confidentiality
+        if path_confidentiality is not None:
+            base_confidentiality = merge_confidentiality(base_confidentiality, path_confidentiality)
+        propagated_confidentiality = self._propagate_confidentiality(base_confidentiality, parents)
         if source_kind is None:
             ctx = call.context or {}
             if isinstance(ctx.get("tool_output"), str) and ctx["tool_output"].strip():
@@ -215,7 +267,6 @@ class Navigator2:
             else:
                 source_kind = "unknown"
 
-        reads, writes = _extract_artifacts(call)
         destinations = evidence_mod.extract_destinations(call)
 
         event = SessionEvent(
@@ -245,6 +296,7 @@ class Navigator2:
             evidence=findings, legacy_minister_results=legacy_verdicts, destinations=destinations,
             untrusted_revision_attempted=untrusted_revision_attempted,
             untrusted_revision_fields=untrusted_revision_fields,
+            session_history=prior_events,
         )
         policy_decisions = self.policy_engine.evaluate_all(facts)
 
@@ -318,6 +370,7 @@ class Navigator2:
         result = verdict_mod.compose(
             session_id=session_id, event_id=event_id, contract=contract, policy_decisions=policy_decisions,
             reasoner_output=reasoner_output, reasoner_invoked=reasoner_invoked,
+            policy_version=getattr(self.policy_engine, "ENGINE_VERSION", PolicyEngine.ENGINE_VERSION),
             reasoner_timed_out=reasoner_timed_out, reasoner_rejected=reasoner_rejected,
             legacy_minister_results=legacy_verdicts, evidence=findings,
         )
