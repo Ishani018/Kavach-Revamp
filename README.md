@@ -58,6 +58,12 @@ python -m tests.test_struct_parse     # script-style suites inherited from the r
 python -m tests.test_ast_parse
 ```
 
+## VS Code pre-execution integration
+
+The first runtime adapter targets VS Code's **Local agent harness**. It registers a `PreToolUse` hook that calls the local Kavach API before tool execution and maps `ALLOW` → allow, `BLOCK` → deny, and `ESCALATE` → ask. API failures, malformed decisions, missing stable session IDs, and audit failures deny the call. It stores the latest user prompt locally for same-session context and writes a private audit log without raw tool arguments.
+
+This integration is a starting point, not a claim of universal agent protection. VS Code hooks are in Preview and this hook does not apply automatically to Cloud, Agent Host, external apps, or arbitrary MCP servers. Follow [the installation and validation guide](docs/vscode-pretool-enforcement.md). The CI adapter tests validate the hook contract; before relying on it, perform the documented live Local-harness test and verify that a blocked side effect never occurs.
+
 ## Limitations
 
 - In-memory CHANNEL state, unbounded, lost on restart. No auth, persistence, ledger, or rate limiting.
