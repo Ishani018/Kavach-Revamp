@@ -38,6 +38,9 @@ _POWERSHELL_DIALECTS = frozenset({"powershell"})
 _TERMINAL_WRAPPER_NAMES = frozenset({"run_in_terminal", "runinterminal", "run_terminal"})
 # zsh and dash use a POSIX-compatible parser approximation, never claimed as full coverage.
 _POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
+# Restrict the approximation to simple portable commands. Metacharacters,
+# substitutions, quoting, redirections, and command chaining remain indeterminate.
+_SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
 
 _DECODE_COMMANDS = re.compile(r"^(base64|base32|base16|xxd)$", re.IGNORECASE)
 _DECODE_FLAG = re.compile(r"^-?-?d(ecode)?$", re.IGNORECASE)
@@ -121,15 +124,25 @@ class ShellEvidenceModule(EvidenceModule):
         parser_dialect = _parser_dialect(dialect)
         extracted = ast_parse.extract_words(cmd, parser_dialect)
         if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
-            # The configured shell is known, but bashlex is only a POSIX-compatible
-            # approximation for zsh/dash. Keep that limitation explicit.
-            coverage = "partial"
-            claim = (
-                f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
-                f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
-                "shell-specific semantics remain unverified"
-            )
-            confidence = 0.65
+            # bashlex is only a POSIX-compatible approximation for zsh/dash.
+            # Call it useful coverage only for a simple command with no shell
+            # metacharacters. Chaining, substitutions, quoting, and redirects
+            # remain indeterminate rather than being silently treated as safe.
+            if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(cmd.strip()):
+                coverage = "partial"
+                claim = (
+                    f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
+                    f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
+                    "simple portable syntax only"
+                )
+                confidence = 0.65
+            else:
+                coverage = "indeterminate"
+                claim = (
+                    f"terminal shell {dialect} command uses syntax outside the simple portable subset; "
+                    "shell-specific or compound semantics remain unverified"
+                )
+                confidence = 0.0
         elif extracted.used_ast:
             coverage = "full"
             claim = f"parsed via real {dialect} grammar ({len(extracted.words)} argument words)"
