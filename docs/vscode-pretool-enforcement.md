@@ -1,12 +1,12 @@
 # Kavach pre-tool enforcement for VS Code Local
 
-This integration connects VS Code's **Local agent harness** **PreToolUse** hook to Kavach's existing four-minister coordinator. The hook receives the actual tool name and arguments before the Local harness invokes that tool. It maps Kavach's verdict to VS Code's native decision:
+This integration connects VS Code's **Local agent harness** **PreToolUse** hook to Kavach's existing four-minister coordinator. The hook receives the actual tool name and arguments before the Local harness invokes that tool. The installed VS Code 1.141.0 Local session executed a tool after Kavach returned `ESCALATE` / `ask`, without showing an approval prompt. Until native approval prompting is verified, the adapter therefore fails closed by mapping `ESCALATE` to `deny`:
 
 | Kavach verdict | VS Code hook decision | Effect |
 |---|---|---|
 | **ALLOW** | **allow** | Permit the proposed tool invocation |
 | **BLOCK** | **deny** | Stop the proposed tool invocation |
-| **ESCALATE** | **ask** | Require user approval |
+| **ESCALATE** | **deny** | Deny the call until native approval prompting is verified |
 | API timeout, missing session ID, malformed response, or audit-write failure | **deny** | Fail closed |
 
 VS Code agent hooks are currently a Preview feature. This first integration intentionally supports the **Local harness only**; hook payloads and enforcement differ across Local, Copilot-on-Agent-Host, Claude, and Codex harnesses. It does not claim to intercept every tool invocation across all VS Code harnesses or external apps.
@@ -94,7 +94,7 @@ The .invalid hostname is reserved for invalid domains; this command is designed 
 For the first real test, manually verify:
 - a harmless command returns **ALLOW** and executes;
 - the controlled command above returns **BLOCK/deny** and the marker is not created;
-- **ESCALATE** returns **ask** and requires confirmation;
+- **ESCALATE** is **denied** until the Local harness approval prompt is independently verified;
 - stopping Kavach causes a new tool call to be denied, not silently allowed.
 
 The exact benign/attack verdicts depend on the current policies. Record false positives and false negatives; do not weaken the fail-closed behavior just to make the happy path pass.
