@@ -93,17 +93,18 @@ class InvariantPolicyEngine:
             verdict == "BLOCK" and name != "NAVIGATOR"
             for name, verdict in facts.legacy_minister_results.items()
         )
-        def approval_matches(prior: SessionEvent) -> bool:
-            if prior.source_kind != "approval":
+        history_by_id = {prior.event_id: prior for prior in facts.session_history}
+
+        def approval_matches(approval: SessionEvent) -> bool:
+            # Approval only covers retrying the same high-impact tool that was
+            # explicitly escalated immediately before the trusted approval event.
+            if approval.source_kind != "approval":
                 return False
-            if prior.arg_summary.get("approved_tool_name") != event.tool_name:
-                return False
-            if not facts.destinations:
-                return True
-            approved_destinations = prior.arg_summary.get("approved_destinations", [])
-            return (
-                isinstance(approved_destinations, list)
-                and set(facts.destinations).issubset(set(approved_destinations))
+            return any(
+                (requested := history_by_id.get(parent_id)) is not None
+                and requested.tool_name == event.tool_name
+                and requested.disposition == "escalate"
+                for parent_id in approval.parent_event_ids
             )
 
         approval_missing = (
@@ -129,16 +130,13 @@ class InvariantPolicyEngine:
 
     @staticmethod
     def _historical_flags(event: SessionEvent) -> dict:
-        # Unknown history is not treated as an approved action.
-        specialists_allowed = (
-            len(event.legacy_minister_results) >= 3
-            and all(verdict == "ALLOW" for verdict in event.legacy_minister_results.values())
-        )
+        # A proposed sensitive read remains relevant to a later send even if
+        # a specialist also blocked it: NAVIGATOR cannot prove the host prevented
+        # the read from executing. This errs toward blocking until the host binds
+        # verdicts to actual execution outcomes.
         sensitive_was_touched = (
-            event.disposition == "allow"
-            and specialists_allowed
-            and event.confidentiality in (ConfidentialityLabel.PRIVATE, ConfidentialityLabel.SECRET)
-            and bool(event.artifacts_read or event.artifacts_written)
+            event.confidentiality in (ConfidentialityLabel.PRIVATE, ConfidentialityLabel.SECRET)
+            and bool(event.artifacts_read)
         )
         return {
             "__kavach_current": False,
@@ -184,6 +182,7 @@ class InvariantPolicyEngine:
                     reason=rationale,
                     evidence_refs=["invariant-local-policy-rule"],
                     event_ids=[facts.event.event_id],
+                    requires_approval=(rule_id == "POL-006"),
                 ))
             deduplicated = {decision.policy_id: decision for decision in decisions}
             return list(deduplicated.values())
