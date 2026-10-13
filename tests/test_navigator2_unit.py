@@ -196,6 +196,33 @@ class TestEvidence:
         call = ToolCall(tool_name="read_file", arguments={"path": "/a/b.txt"}, session_id="s")
         assert ev.ShellEvidenceModule().analyze(call) == []
 
+    def test_vscode_terminal_wrapper_uses_configured_zsh_without_false_indeterminate(self, monkeypatch):
+        """The VS Code tool name is run_in_terminal, not the shell dialect."""
+        monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+        call = ToolCall(tool_name="run_in_terminal", arguments={"command": "pwd"}, session_id="s")
+        findings = ev.run_all(call)
+        shell_findings = [finding for finding in findings if finding.module == "shell_ast"]
+        assert shell_findings and shell_findings[0].coverage == "partial"
+        assert "zsh" in shell_findings[0].claim
+        assert not any(finding.coverage == "indeterminate" for finding in findings)
+
+    def test_vscode_terminal_unknown_shell_stays_fail_closed(self, monkeypatch):
+        monkeypatch.delenv("KAVACH_TERMINAL_DIALECT", raising=False)
+        monkeypatch.delenv("SHELL", raising=False)
+        call = ToolCall(tool_name="run_in_terminal", arguments={"command": "pwd"}, session_id="s")
+        findings = ev.run_all(call)
+        assert any(finding.coverage == "indeterminate" for finding in findings)
+
+    def test_vscode_terminal_keeps_decode_execute_detection(self, monkeypatch):
+        monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+        call = ToolCall(
+            tool_name="run_in_terminal",
+            arguments={"command": 'X=$(echo c2VjcmV0 | base64 -d); eval "$X"'},
+            session_id="s",
+        )
+        findings = ev.DecodeExecutionEvidenceModule().analyze(call)
+        assert any(finding.coverage == "full" and "decode-then-execute" in finding.claim for finding in findings)
+
     def test_decode_execution_resolves_single_hop_indirection(self):
         call = ToolCall(tool_name="bash",
                          arguments={"command": 'X=$(echo c2VjcmV0 | base64 -d); eval "$X"'}, session_id="s")
@@ -679,3 +706,50 @@ class TestNavigator2Core:
         result = nav2.check(call)
         assert result.disposition == "block"
         assert result.reasoner_invoked is False
+
+
+def test_vscode_terminal_pwd_allows_when_the_configured_shell_is_covered(monkeypatch):
+    """A routine VS Code terminal command shouldn't escalate only because the host tool has a wrapper name."""
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+    session_id = "vscode-terminal-test"
+    nav2 = Navigator2()
+    nav2.contract_store.start_session(session_id, goal="Run pwd in the current project directory.")
+    call = ToolCall(
+        tool_name="run_in_terminal",
+        arguments={"command": "pwd"},
+        session_id=session_id,
+        context={"user_instruction": "Run only pwd in the current project directory."},
+    )
+    legacy = {
+        name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
+        for name in ("VAULT", "EXECUTOR", "CHANNEL")
+    }
+
+    result = nav2.check(call, legacy_results=legacy)
+
+    assert result.disposition == "allow", result.reason
+    assert not any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
+
+
+def test_vscode_terminal_unknown_shell_does_not_silently_allow(monkeypatch):
+    """Without a known/configured shell, the coverage gap must still fail closed."""
+    monkeypatch.delenv("KAVACH_TERMINAL_DIALECT", raising=False)
+    monkeypatch.delenv("SHELL", raising=False)
+    session_id = "vscode-terminal-unknown-shell-test"
+    nav2 = Navigator2()
+    nav2.contract_store.start_session(session_id, goal="Run pwd in the current project directory.")
+    call = ToolCall(
+        tool_name="run_in_terminal",
+        arguments={"command": "pwd"},
+        session_id=session_id,
+        context={"user_instruction": "Run only pwd in the current project directory."},
+    )
+    legacy = {
+        name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
+        for name in ("VAULT", "EXECUTOR", "CHANNEL")
+    }
+
+    result = nav2.check(call, legacy_results=legacy)
+
+    assert result.disposition == "escalate", result.reason
+    assert any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
