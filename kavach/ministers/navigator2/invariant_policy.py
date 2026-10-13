@@ -93,9 +93,22 @@ class InvariantPolicyEngine:
             verdict == "BLOCK" and name != "NAVIGATOR"
             for name, verdict in facts.legacy_minister_results.items()
         )
+        def approval_matches(prior: SessionEvent) -> bool:
+            if prior.source_kind != "approval":
+                return False
+            if prior.arg_summary.get("approved_tool_name") != event.tool_name:
+                return False
+            if not facts.destinations:
+                return True
+            approved_destinations = prior.arg_summary.get("approved_destinations", [])
+            return (
+                isinstance(approved_destinations, list)
+                and set(facts.destinations).issubset(set(approved_destinations))
+            )
+
         approval_missing = (
             event.tool_name in contract.high_impact_categories_requiring_approval
-            and not any(prior.source_kind == "approval" for prior in facts.session_history)
+            and not any(approval_matches(prior) for prior in facts.session_history)
         )
         return {
             "__kavach_current": True,
