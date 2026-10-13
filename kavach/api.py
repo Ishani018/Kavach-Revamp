@@ -24,6 +24,7 @@ from .schemas import MINISTER_NAMES, Decision, ToolCall
 
 log = logging.getLogger("kavach.api")
 WEB_INDEX = Path(__file__).resolve().parents[1] / "web" / "index.html"
+WEB_LOGO = Path(__file__).resolve().parents[1] / "web" / "assets" / "kavach-shield.png"
 SESSION_COOKIE = "kavach_session"
 SESSION_MAX_AGE = 8 * 60 * 60
 CATALOG_COLUMNS = (
@@ -115,6 +116,12 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
         if not WEB_INDEX.is_file():
             raise HTTPException(status_code=404, detail="Dashboard assets are not installed.")
         return FileResponse(WEB_INDEX, media_type="text/html")
+
+    @app.get("/assets/kavach-shield.png", include_in_schema=False)
+    def dashboard_logo() -> FileResponse:
+        if not WEB_LOGO.is_file():
+            raise HTTPException(status_code=404, detail="Dashboard logo is not installed.")
+        return FileResponse(WEB_LOGO, media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
 
     @app.get("/health")
     def health() -> dict[str, Any]:
