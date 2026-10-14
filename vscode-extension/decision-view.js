@@ -77,7 +77,10 @@ function ministerExplanation(name, minister) {
     return 'The data-movement/provenance review returned ' + minister.verdict + '; raw values are withheld.';
   }
   if (name === 'NAVIGATOR' && ids.length) {
-    return 'Policy evidence: ' + ids.map(prettyRule).join('; ') + '.';
+    const evidence = 'Policy evidence: ' + ids.map(prettyRule).join('; ') + '.';
+    return minister.verdict === 'ESCALATE'
+      ? evidence + ' Coverage is unresolved; this is not by itself proof of malicious intent.'
+      : evidence;
   }
   return minister.verdict === 'ESCALATE'
     ? 'Coverage or policy evidence is unresolved; this is not by itself proof of malicious intent.'
