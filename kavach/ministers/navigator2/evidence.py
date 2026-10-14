@@ -43,6 +43,9 @@ _POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
 # Fast path for unquoted, simple portable commands.
 _SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
 _SHELL_CONTROL_CHARS = frozenset("|&;<>$\x60*?[]{}()")
+# Exact read-only compound forms approved for partial zsh/dash coverage.
+# Do not generalize this to arbitrary && chains: enumerate reviewed forms only.
+_SAFE_COMPOUND_TERMINAL_COMMANDS = frozenset({"pwd && whoami"})
 
 def _quoted_command_has_no_shell_control_syntax(command: str) -> bool:
     """Permit ordinary quoting only when it cannot hide shell expansion/control flow.
@@ -113,10 +116,18 @@ def _python_inline_code_is_static_print(words: List[str]) -> bool:
     return True
 
 
-def _is_simple_terminal_command(command: str) -> bool:
-    """Return true only for a single, parseable command in a constrained subset."""
+def _is_constrained_terminal_command(command: str) -> bool:
+    """Accept a strict command subset plus explicitly allowlisted read-only chains.
+
+    This is not a general shell safety classifier. Compound syntax is accepted
+    only when the normalized whole command exactly matches a reviewed entry;
+    unknown chains, operators, expansions, and redirections remain indeterminate.
+    """
     stripped = command.strip()
     if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(stripped):
+        return True
+    normalized = re.sub(r"[ \t]+", " ", stripped)
+    if normalized in _SAFE_COMPOUND_TERMINAL_COMMANDS:
         return True
     if not stripped or not _quoted_command_has_no_shell_control_syntax(stripped):
         return False
@@ -210,10 +221,11 @@ class ShellEvidenceModule(EvidenceModule):
         if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
             # bashlex is only a POSIX-compatible approximation for zsh/dash.
             # Quoted arguments are accepted only when unquoted shell control/
-            # expansion syntax is absent. Inline Python -c code is narrower:
-            # only literal-only print() expressions qualify; other code remains
-            # indeterminate even if its outer shell command parses cleanly.
-            if _is_simple_terminal_command(cmd):
+            # expansion syntax is absent. One exact read-only compound chain is
+            # allowlisted above; arbitrary compound syntax still stays
+            # indeterminate. Inline Python -c code is narrower: only literal-only
+            # print() expressions qualify; other code remains indeterminate.
+            if _is_constrained_terminal_command(cmd):
                 coverage = "partial"
                 claim = (
                     f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
