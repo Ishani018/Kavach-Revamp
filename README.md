@@ -69,6 +69,10 @@ cd vscode-extension
 npm run verify
 ```
 
+## AI-assisted command preflight
+
+The VS Code extension now contributes a language-model tool (`#kavachPreflight`) so Copilot's agent can send an exact candidate terminal command to the loopback Kavach API *as data*, consider the structured minister/policy result, and explain uncertainty before deciding what to do. It does not execute commands or turn model confidence into a policy verdict. BLOCK, ESCALATE, and UNVERIFIED are stop conditions for the dedicated `Kavach Guarded Engineer` profile. An ALLOW from preflight is advisory; the Local `PreToolUse` hook independently checks the real tool call. See [the AI preflight tool docs](vscode-extension/README.md#ai-assisted-preflight-tool).
+
 ## VS Code pre-execution integration
 
 The first runtime adapter targets VS Code's **Local agent harness**. It registers a `PreToolUse` hook that calls the local Kavach API before tool execution and maps `ALLOW` → allow, `BLOCK` → deny, and `ESCALATE` → deny (fail-closed until the native approval prompt is verified). In a live VS Code 1.141.0 Local test, a tool executed after an `ask` result without a confirmation prompt, so this adapter does not rely on `ask` for security. API failures, malformed decisions, missing stable session IDs, and audit failures also deny the call. It stores the latest user prompt locally for same-session context and writes a private audit log without raw tool arguments. Each tool check also emits a user-visible `KAVACH PRE-TOOL REVIEW` message containing the final policy verdict, each minister's verdict, any rule/policy IDs, and a privacy-safe explanation; the same report is added as model context so the agent can explain the decision. Command excerpts, secret values, and destination strings are withheld from the report.
