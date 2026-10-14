@@ -1,0 +1,71 @@
+{
+  "name": "kavach-chat-participant",
+  "displayName": "Kavach Chat",
+  "description": "Live, visual Kavach minister decisions inside VS Code Copilot Chat.",
+  "version": "0.1.0",
+  "publisher": "ishani018",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onChatParticipant:kavach.chat"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "scripts": {
+    "check": "node --check extension.js && node --check decision-view.js",
+    "test": "node --test test/*.test.js",
+    "verify": "npm run check && npm test"
+  },
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "kavach.chat",
+        "name": "kavach",
+        "fullName": "Kavach",
+        "description": "Inspect local agent safety decisions with a visual, live minister trace.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "demo",
+            "description": "Run one live API-backed scenario without executing it"
+          },
+          {
+            "name": "why",
+            "description": "Explain the last observed verdict and matched rules"
+          },
+          {
+            "name": "compare",
+            "description": "Compare routine, blocked, and uncertain synthetic calls"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "kavach.openDemoScenario",
+        "title": "Kavach: Open a demo scenario"
+      },
+      {
+        "command": "kavach.openCompare",
+        "title": "Kavach: Compare scenarios"
+      }
+    ],
+    "configuration": {
+      "title": "Kavach Chat",
+      "properties": {
+        "kavach.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8088",
+          "description": "Local Kavach API base URL. Only localhost/loopback endpoints are accepted."
+        }
+      }
+    }
+  }
+}
