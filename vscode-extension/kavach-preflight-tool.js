@@ -6,6 +6,36 @@ const TOOL_NAME = 'kavach-chat-participant_inspect_terminal_command';
 const MAX_COMMAND_CHARS = 12000;
 const MAX_INTENT_CHARS = 1500;
 
+const MINISTER_ROLES = {
+  VAULT: 'Reviews credential and secret exposure.',
+  EXECUTOR: 'Reviews dangerous execution and code-launch patterns.',
+  CHANNEL: 'Reviews sensitive-data movement and destination provenance.',
+  NAVIGATOR: 'Reviews task-contract alignment, evidence coverage, and trajectory policies.'
+};
+
+const POLICY_EXPLANATIONS = {
+  'POL-001': 'Sensitive data is proposed for a destination outside the task contract.',
+  'POL-002': 'A path falls outside the declared workspace scope.',
+  'POL-003': 'Untrusted content attempted to change what the task contract authorizes.',
+  'POL-004': 'A decode-then-execute structure was confirmed; the policy escalates unless stronger evidence supports a block.',
+  'POL-005': 'A specialist minister returned a hard block and NAVIGATOR preserved it.',
+  'POL-006': 'A contract-flagged high-impact action lacks a recorded approval event.',
+  'POL-007': 'Evidence coverage is incomplete. This is uncertainty, not by itself proof of malicious intent.',
+  'POL-008': 'The requested tool category is explicitly denied by the task contract.',
+  'POL-009': 'The session previously touched sensitive data and now proposes sending it to an unapproved destination.'
+};
+
+function explainRuleId(id) {
+  if (POLICY_EXPLANATIONS[id]) return POLICY_EXPLANATIONS[id];
+  if (id === 'EXECUTOR-PREFILTER:os-system-call') {
+    return 'EXECUTOR detected a known programmatic shell-execution pattern.';
+  }
+  if (id.startsWith('EXECUTOR-')) {
+    return 'EXECUTOR reported a detector-specific execution signal; consult the matching rule documentation.';
+  }
+  return 'The minister reported this rule ID; its meaning has not been expanded by the preflight formatter.';
+}
+
 function validateInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('Input must be an object with a command string.');
@@ -61,9 +91,12 @@ function summarizeDecision(value) {
   const ministers = {};
   for (const name of MINISTERS) {
     const result = decision.ministers[name];
+    const ids = ruleIds(result);
     ministers[name] = {
+      role: MINISTER_ROLES[name],
       verdict: result.verdict,
-      rule_ids: ruleIds(result)
+      rule_ids: ids,
+      rule_explanations: ids.map((id) => ({ id, meaning: explainRuleId(id) }))
     };
   }
 
@@ -182,5 +215,8 @@ module.exports = {
   summarizeDecision,
   unavailableResult,
   inspectCommand,
-  createLanguageModelTool
+  createLanguageModelTool,
+  explainRuleId,
+  POLICY_EXPLANATIONS,
+  MINISTER_ROLES
 };
