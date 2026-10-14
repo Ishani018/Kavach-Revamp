@@ -99,7 +99,12 @@ function unavailableResult(error) {
 
 async function inspectCommand(input, options = {}) {
   const safe = validateInput(input);
-  const url = localCheckUrl(options.apiBaseUrl);
+  let url;
+  try {
+    url = localCheckUrl(options.apiBaseUrl);
+  } catch (error) {
+    return unavailableResult(error);
+  }
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') {
     return unavailableResult(new Error('This VS Code runtime does not provide fetch.'));
@@ -145,10 +150,11 @@ function createLanguageModelTool(vscode) {
   return {
     async prepareInvocation(options) {
       const safe = validateInput(options.input);
-      const message = new vscode.MarkdownString(
-        'Send this proposed command as data to the local Kavach policy API for inspection. **This tool will not execute it.**\n\nProposed command:\n\n' +
-        safe.command + '\n\nThe normal Local PreToolUse hook independently checks the real tool call.'
-      );
+      const message = new vscode.MarkdownString();
+      message.appendMarkdown('Send this proposed command as data to the local Kavach policy API for inspection. **This tool will not execute it.**');
+      message.appendMarkdown('\n\nProposed command:');
+      message.appendCodeblock(safe.command, 'sh');
+      message.appendMarkdown('The normal Local PreToolUse hook independently checks the real tool call.');
       return {
         invocationMessage: 'Inspecting proposed terminal command with local Kavach',
         confirmationMessages: {
