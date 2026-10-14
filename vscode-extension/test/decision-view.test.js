@@ -43,6 +43,7 @@ test('renders exact EXECUTOR rule IDs without revealing raw reasons', () => {
   const rendered = view.formatDecision({ title: 'Known execution rule', intent: 'Exercise a known rule.' }, value);
   assert.match(rendered, /EXECUTOR-PREFILTER:os-system-call/);
   assert.match(rendered, /POL-007/);
+  assert.match(rendered, /\n\n\| Minister \| Verdict/);
   assert.match(rendered, /did not execute the scenario command/);
   assert.doesNotMatch(rendered, /RAW SECRET OR COMMAND SHOULD NEVER BE SHOWN/);
 });
