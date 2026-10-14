@@ -103,7 +103,7 @@ def _python_inline_code_is_static_print(words: List[str]) -> bool:
     if not words:
         return False
     executable = words[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if not re.fullmatch(r"python(?:3(?:\\.\\d+)?)?", executable):
+    if not re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable):
         return True
     if "-c" not in words[1:]:
         return True
