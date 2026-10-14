@@ -28,6 +28,7 @@ The extension contributes a Copilot language-model tool named `#kavachPreflight`
 
 - The tool sends the command as JSON data to loopback only. It never launches a terminal or executes the command.
 - The response contains the overall verdict, deciding minister, minister verdicts, and rule IDs. Raw minister reason text is withheld from the model-tool response.
+- The intent field is caller-supplied and is not independently authenticated. It cannot establish that the user authorized a side effect; the result is advisory and may differ from the real hook's verdict.
 - On **BLOCK**, **ESCALATE**, or **UNVERIFIED**, the model is instructed to stop and not route around the result.
 - Even when preflight returns **ALLOW**, the actual Local `PreToolUse` hook remains an independent, authoritative check of the real tool call.
 - Model reasoning may explain evidence or suggest a safer plan, but it has no permission to overrule the deterministic policy result.
