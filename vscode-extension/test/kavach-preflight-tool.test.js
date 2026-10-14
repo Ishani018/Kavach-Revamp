@@ -61,6 +61,7 @@ test('returns only normalized minister verdicts and rule IDs, never raw reasons'
   assert.equal(result.decided_by, 'EXECUTOR');
   assert.match(result.ministers.EXECUTOR.rule_ids.join(','), /os-system-call/);
   assert.match(result.agent_guidance, /Do not execute/);
+  assert.match(result.ministers.NAVIGATOR.rule_explanations.map((item) => item.meaning).join(' '), /not by itself proof of malicious intent/);
   const serialized = JSON.stringify(result);
   assert.doesNotMatch(serialized, /SECRET_COMMAND_AND_ARGUMENT|INTERNAL_DETAIL|RAW_REASON_MUST_NOT_LEAK/);
   assert.match(serialized, /synthetic preflight/);
