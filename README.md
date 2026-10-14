@@ -58,6 +58,17 @@ python -m tests.test_struct_parse     # script-style suites inherited from the r
 python -m tests.test_ast_parse
 ```
 
+## VS Code Copilot Chat Participant
+
+The optional extension under `vscode-extension/` adds the `@kavach` chat participant with `/demo`, `/why`, and `/compare` commands. It sends fixed, synthetic tool-call records to the localhost `/check` API and renders the actual four-minister response in Copilot Chat. It never executes demo commands and cannot replace the separate Local `PreToolUse` enforcement hook. See [the extension setup and safety notes](vscode-extension/README.md).
+
+Run its dependency-free Node checks from the repository root:
+
+```bash
+cd vscode-extension
+npm run verify
+```
+
 ## VS Code pre-execution integration
 
 The first runtime adapter targets VS Code's **Local agent harness**. It registers a `PreToolUse` hook that calls the local Kavach API before tool execution and maps `ALLOW` → allow, `BLOCK` → deny, and `ESCALATE` → deny (fail-closed until the native approval prompt is verified). In a live VS Code 1.141.0 Local test, a tool executed after an `ask` result without a confirmation prompt, so this adapter does not rely on `ask` for security. API failures, malformed decisions, missing stable session IDs, and audit failures also deny the call. It stores the latest user prompt locally for same-session context and writes a private audit log without raw tool arguments. Each tool check also emits a user-visible `KAVACH PRE-TOOL REVIEW` message containing the final policy verdict, each minister's verdict, any rule/policy IDs, and a privacy-safe explanation; the same report is added as model context so the agent can explain the decision. Command excerpts, secret values, and destination strings are withheld from the report.
