@@ -789,17 +789,22 @@ def test_vscode_terminal_allows_static_literal_python_print(monkeypatch):
     assert not any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
 
 
-def test_vscode_terminal_allows_exact_safe_compound_pwd_whoami(monkeypatch):
-    """An exact, read-only command chain is covered without opening up shell operators generally."""
+@pytest.mark.parametrize("command", [
+    "pwd && whoami",
+    "pwd && echo KAVACH_TEST",
+    "git status --short && pwd",
+])
+def test_vscode_terminal_covers_supported_compound_command_lists(monkeypatch, command):
+    """Coverage is syntax-based, not tied to one exact command string."""
     monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
-    session_id = "vscode-terminal-safe-compound-test"
+    session_id = "vscode-terminal-compound-coverage-test"
     nav2 = Navigator2()
-    nav2.contract_store.start_session(session_id, goal="Show the current directory and username.")
+    nav2.contract_store.start_session(session_id, goal="Run supported terminal commands.")
     call = ToolCall(
         tool_name="run_in_terminal",
-        arguments={"command": "pwd && whoami"},
+        arguments={"command": command},
         session_id=session_id,
-        context={"user_instruction": "Show the current directory and username."},
+        context={"user_instruction": "Run the specified terminal command."},
     )
     legacy = {
         name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
@@ -812,17 +817,17 @@ def test_vscode_terminal_allows_exact_safe_compound_pwd_whoami(monkeypatch):
     assert not any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
 
 
-def test_vscode_terminal_unknown_compound_chain_stays_indeterminate(monkeypatch):
-    """Only the exact reviewed compound command is accepted; other && chains fail closed."""
+def test_vscode_terminal_compound_chain_with_expansion_stays_indeterminate(monkeypatch):
+    """Shell variable expansion remains an explicit evidence-coverage gap."""
     monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
-    session_id = "vscode-terminal-unknown-compound-test"
+    session_id = "vscode-terminal-compound-expansion-test"
     nav2 = Navigator2()
-    nav2.contract_store.start_session(session_id, goal="Run a test command.")
+    nav2.contract_store.start_session(session_id, goal="Test unresolved shell expansion.")
     call = ToolCall(
         tool_name="run_in_terminal",
-        arguments={"command": "pwd && echo KAVACH_SHOULD_NOT_RUN"},
+        arguments={"command": 'pwd && echo "$KAVACH_PAYLOAD"'},
         session_id=session_id,
-        context={"user_instruction": "Run a test command."},
+        context={"user_instruction": "Run the specified command."},
     )
     legacy = {
         name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
