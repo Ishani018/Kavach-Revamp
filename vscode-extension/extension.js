@@ -102,7 +102,7 @@ function showApiError(stream, error) {
     '3. Check the `kavach.apiBaseUrl` setting; non-loopback hosts are rejected.',
     '',
     'Demo scenarios are posted as JSON to `/check`; their command strings are never run by this extension.'
-  ].join('\n').replaceAll('`', String.fromCharCode(96)));
+  ].join('\n'));
 }
 
 function addScenarioButtons(stream) {
@@ -130,7 +130,7 @@ function intro(stream) {
     '| `/demo print` | Regression check for the literal Python print fix |',
     '| `/why` | Reopen the last observed API result |',
     '| `/compare` | Compare three controlled scenarios |'
-  ].join('\n').replaceAll('`', String.fromCharCode(96)));
+  ].join('\n'));
   addScenarioButtons(stream);
 }
 
