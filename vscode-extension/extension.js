@@ -2,6 +2,7 @@
 
 const vscode = require('vscode');
 const { formatDecision, formatComparison, formatWhy, validateDecision } = require('./decision-view');
+const { TOOL_NAME, createLanguageModelTool } = require('./kavach-preflight-tool');
 const LAST_DECISION_KEY = 'kavachChat.lastDecision';
 const SCENARIOS = {
   allow: {
@@ -202,6 +203,9 @@ function activate(context) {
       return { metadata: { command: command || 'error' } };
     }
   };
+  if (vscode.lm && typeof vscode.lm.registerTool === 'function') {
+    context.subscriptions.push(vscode.lm.registerTool(TOOL_NAME, createLanguageModelTool(vscode)));
+  }
   const participant = vscode.chat.createChatParticipant('kavach.chat', handler);
   participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'kavach.svg');
   context.subscriptions.push(participant);
