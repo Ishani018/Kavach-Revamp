@@ -99,7 +99,7 @@ function formatDecision(scenario, input) {
     '> LIVE API RESULT · SYNTHETIC PRE-FLIGHT INSPECTION',
     '',
     '**Scenario:** ' + scenario.title,
-    '**Proposed tool:** §run_in_terminal§',
+    '**Proposed tool:** `run_in_terminal`',
     '**Intent:** ' + scenario.intent,
     '',
     '| Minister | Verdict | Rule / policy | Explanation |',
@@ -107,14 +107,14 @@ function formatDecision(scenario, input) {
     ...rows,
     '',
     '### Decision path',
-    '§Proposed call§ → §VAULT§ → §EXECUTOR§ → §CHANNEL§ → §NAVIGATOR§ → §Speaker§',
+    '`Proposed call` → `VAULT` → `EXECUTOR` → `CHANNEL` → `NAVIGATOR` → `Speaker`',
     '',
-    '**What happened:** Kavach evaluated a synthetic tool-call record through the local §/check§ API. **This chat demo did not execute the scenario command and does not prove the VS Code pre-tool hook enforced it.**',
+    '**What happened:** Kavach evaluated a synthetic tool-call record through the local `/check` API. **This chat demo did not execute the scenario command and does not prove the VS Code pre-tool hook enforced it.**',
     '',
     scenario.expectedNote ? '**Demo note:** ' + scenario.expectedNote : '',
     '',
-    'Use §/why§ for the last API result, or §/compare§ to run all three controlled cases.'
-  ].filter(Boolean).join('\n').replaceAll('§', String.fromCharCode(96));
+    'Use `/why` for the last API result, or `/compare` to run all three controlled cases.'
+  ].filter(Boolean).join('\n').replaceAll('`', String.fromCharCode(96));
 }
 
 function formatComparison(results) {
@@ -138,15 +138,15 @@ function formatComparison(results) {
     ...rows,
     '',
     '### Pipeline',
-    '§Synthetic call§ → §4 ministers§ → §Speaker§ → §Local API response§',
+    '`Synthetic call` → `4 ministers` → `Speaker` → `Local API response`',
     '',
     'These are controlled demonstrations of current rules, not a benchmark or proof of broad detection coverage.'
-  ].join('\n').replaceAll('§', String.fromCharCode(96));
+  ].join('\n').replaceAll('`', String.fromCharCode(96));
 }
 
 function formatWhy(snapshot) {
   if (!snapshot || !snapshot.scenario || !snapshot.decision) {
-    return 'No Kavach Chat decision is stored yet. Run §/demo allow§, §/demo block§, §/demo escalate§, or §/demo print§ first.'.replaceAll('§', String.fromCharCode(96));
+    return 'No Kavach Chat decision is stored yet. Run `/demo allow`, `/demo block`, `/demo escalate`, or `/demo print` first.'.replaceAll('`', String.fromCharCode(96));
   }
   return formatDecision(snapshot.scenario, snapshot.decision);
 }
