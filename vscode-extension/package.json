@@ -13,13 +13,14 @@
   ],
   "main": "./extension.js",
   "activationEvents": [
-    "onChatParticipant:kavach.chat"
+    "onChatParticipant:kavach.chat",
+    "onLanguageModelTool:kavach-chat-participant_inspect_terminal_command"
   ],
   "extensionKind": [
     "workspace"
   ],
   "scripts": {
-    "check": "node --check extension.js && node --check decision-view.js",
+    "check": "node --check extension.js && node --check decision-view.js && node --check kavach-preflight-tool.js",
     "test": "node --test test/*.test.js",
     "verify": "npm run check && npm test"
   },
@@ -66,6 +67,33 @@
           "description": "Local Kavach API base URL. Only localhost/loopback endpoints are accepted."
         }
       }
-    }
+    },
+    "languageModelTools": [
+      {
+        "name": "kavach-chat-participant_inspect_terminal_command",
+        "displayName": "Kavach terminal preflight",
+        "modelDescription": "Before proposing a terminal command for execution, inspect the exact command with Kavach's local policy API. Submit the full proposed command and the user's intent as data. This tool NEVER executes it. Use the result to understand minister/policy findings and explain uncertainty. If BLOCK or ESCALATE, stop; do not retry or route around the decision. Even for ALLOW, the real VS Code Local PreToolUse hook must independently check the actual call.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "kavachPreflight",
+        "icon": "$(shield)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Exact proposed terminal command, without Markdown fences. This is submitted as data only and is never executed by this tool."
+            },
+            "intent": {
+              "type": "string",
+              "description": "Brief user-authorized goal this command is meant to achieve."
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
   }
 }
