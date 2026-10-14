@@ -117,7 +117,7 @@ function formatDecision(scenario, input) {
     scenario.expectedNote ? '**Demo note:** ' + scenario.expectedNote : '',
     '',
     'Use `/why` for the last API result, or `/compare` to run all three controlled cases.'
-  ].filter(Boolean).join('\n').replaceAll('`', String.fromCharCode(96));
+  ].filter(Boolean).join('\n');
 }
 
 function formatComparison(results) {
@@ -144,12 +144,12 @@ function formatComparison(results) {
     '`Synthetic call` → `4 ministers` → `Speaker` → `Local API response`',
     '',
     'These are controlled demonstrations of current rules, not a benchmark or proof of broad detection coverage.'
-  ].join('\n').replaceAll('`', String.fromCharCode(96));
+  ].join('\n');
 }
 
 function formatWhy(snapshot) {
   if (!snapshot || !snapshot.scenario || !snapshot.decision) {
-    return 'No Kavach Chat decision is stored yet. Run `/demo allow`, `/demo block`, `/demo escalate`, or `/demo print` first.'.replaceAll('`', String.fromCharCode(96));
+    return 'No Kavach Chat decision is stored yet. Run `/demo allow`, `/demo block`, `/demo escalate`, or `/demo print` first.';
   }
   return formatDecision(snapshot.scenario, snapshot.decision);
 }
