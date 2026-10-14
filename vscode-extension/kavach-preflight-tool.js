@@ -73,13 +73,13 @@ function summarizeDecision(value) {
   } else if (decision.verdict === 'ESCALATE') {
     agentGuidance = 'STOP before execution. Escalation means policy/evidence is unresolved, not necessarily that the command is malicious. Explain the uncertainty and ask the user how to proceed; do not route around this result.';
   } else {
-    agentGuidance = 'Kavach returned ALLOW for this synthetic preflight only. This is not proof of safety or permission to skip the independent real PreToolUse hook; submit the actual unchanged call through the normal guarded workflow.';
+    agentGuidance = 'Kavach returned ALLOW for this synthetic preflight only. The intent supplied to preflight is not independently authenticated and cannot establish user authorization. This is not proof of safety or permission to skip the independent real PreToolUse hook; submit the actual unchanged call through the normal guarded workflow.';
   }
 
   return {
     status: 'checked',
     source: 'local Kavach /check API',
-    evaluation_type: 'synthetic preflight; this tool sends command text as JSON and never executes it',
+    evaluation_type: 'synthetic preflight; intent is caller-supplied and unauthenticated; command text is sent as JSON and never executed',
     verdict: decision.verdict,
     decided_by: decision.decided_by,
     ministers,
