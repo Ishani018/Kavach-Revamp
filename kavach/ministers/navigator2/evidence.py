@@ -230,7 +230,7 @@ class ShellEvidenceModule(EvidenceModule):
                 claim = (
                     f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
                     f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
-                    "constrained single-command syntax only"
+                    "strictly constrained terminal syntax only"
                 )
                 confidence = 0.65
             else:
