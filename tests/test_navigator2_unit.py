@@ -789,6 +789,57 @@ def test_vscode_terminal_allows_static_literal_python_print(monkeypatch):
     assert not any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
 
 
+@pytest.mark.parametrize("command", [
+    "pwd && whoami",
+    "pwd && echo KAVACH_TEST",
+    "git status --short && pwd",
+])
+def test_vscode_terminal_covers_supported_compound_command_lists(monkeypatch, command):
+    """Coverage is syntax-based, not tied to one exact command string."""
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+    session_id = "vscode-terminal-compound-coverage-test"
+    nav2 = Navigator2()
+    nav2.contract_store.start_session(session_id, goal="Run supported terminal commands.")
+    call = ToolCall(
+        tool_name="run_in_terminal",
+        arguments={"command": command},
+        session_id=session_id,
+        context={"user_instruction": "Run the specified terminal command."},
+    )
+    legacy = {
+        name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
+        for name in ("VAULT", "EXECUTOR", "CHANNEL")
+    }
+
+    result = nav2.check(call, legacy_results=legacy)
+
+    assert result.disposition == "allow", result.reason
+    assert not any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
+
+
+def test_vscode_terminal_compound_chain_with_expansion_stays_indeterminate(monkeypatch):
+    """Shell variable expansion remains an explicit evidence-coverage gap."""
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")
+    session_id = "vscode-terminal-compound-expansion-test"
+    nav2 = Navigator2()
+    nav2.contract_store.start_session(session_id, goal="Test unresolved shell expansion.")
+    call = ToolCall(
+        tool_name="run_in_terminal",
+        arguments={"command": 'pwd && echo "$KAVACH_PAYLOAD"'},
+        session_id=session_id,
+        context={"user_instruction": "Run the specified command."},
+    )
+    legacy = {
+        name: MinisterResult(minister=name, verdict="ALLOW", reason="controlled test")
+        for name in ("VAULT", "EXECUTOR", "CHANNEL")
+    }
+
+    result = nav2.check(call, legacy_results=legacy)
+
+    assert result.disposition == "escalate", result.reason
+    assert any(decision.policy_id == "POL-007" for decision in result.policy_decisions)
+
+
 def test_vscode_terminal_keeps_arbitrary_python_c_code_indeterminate(monkeypatch):
     """Shell parsing must not be confused with proof that inline Python is safe."""
     monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "zsh")

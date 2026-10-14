@@ -42,49 +42,63 @@ _TERMINAL_WRAPPER_NAMES = frozenset({"run_in_terminal", "runinterminal", "run_te
 _POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
 # Fast path for unquoted, simple portable commands.
 _SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
-_SHELL_CONTROL_CHARS = frozenset("|&;<>$\x60*?[]{}()")
 
-def _quoted_command_has_no_shell_control_syntax(command: str) -> bool:
-    """Permit ordinary quoting only when it cannot hide shell expansion/control flow.
+def _has_only_supported_shell_syntax(command: str) -> bool:
+    """Accept the constrained POSIX syntax subset covered by the parser.
 
-    This is deliberately a small lexer, not a shell parser. bashlex must also
-    successfully parse the call; this check only distinguishes literal quotes
-    from unquoted operators and shell expansions in the zsh/dash approximation.
+    This separates syntax coverage from command safety. Compound command-list
+    operators (&& and ;) are permitted when bashlex parsed the complete input.
+    Expansions, substitutions, redirects, pipelines, globs, subshells, and
+    background execution remain indeterminate in the zsh/dash approximation.
     """
     quote = None
     escaped = False
-    for char in command.strip():
+    i = 0
+    while i < len(command):
+        char = command[i]
         if escaped:
             escaped = False
+            i += 1
             continue
         if quote == "'":
             if char == "'":
                 quote = None
+            i += 1
             continue
         if quote == '"':
             if char == "\\":
                 escaped = True
             elif char == '"':
                 quote = None
-            elif char in "$\x60":
+            elif char in "$`":
                 return False
+            i += 1
             continue
         if char == "\\":
             escaped = True
-        elif char in ("'", '"'):
-            quote = char
-        elif char in _SHELL_CONTROL_CHARS or char in "\r\n":
+        elif char == "'":
+            quote = "'"
+        elif char == '"':
+            quote = '"'
+        elif char in "$`<>|*?[]{}()\r\n":
             return False
+        elif char == "&":
+            # Logical AND is supported; single & (background execution) is not.
+            if i + 1 >= len(command) or command[i + 1] != "&":
+                return False
+            i += 1
+        # A semicolon is a parsed command-list operator, not an unknown shell
+        # feature. Whether a command is risky is left to the policy pipeline.
+        i += 1
     return quote is None and not escaped
 
 
 def _python_inline_code_is_static_print(words: List[str]) -> bool:
-    """Recognize only literal-only Python -c print statements as harmless.
+    """Recognize only literal-only Python -c print statements as harmless syntax.
 
-    A shell AST alone says nothing about the meaning of code passed to an
-    interpreter. This strict subset is just enough for the benign print demo;
-    imports, attribute calls, assignments, dynamic values, and all other code
-    remain indeterminate and continue to fail closed.
+    A shell AST cannot prove the effects of embedded interpreter code. Imports,
+    attribute calls, assignments, dynamic values, and all other code stay
+    indeterminate even if the outer shell command parses cleanly.
     """
     if not words:
         return False
@@ -113,12 +127,18 @@ def _python_inline_code_is_static_print(words: List[str]) -> bool:
     return True
 
 
-def _is_simple_terminal_command(command: str) -> bool:
-    """Return true only for a single, parseable command in a constrained subset."""
+def _is_constrained_terminal_command(command: str) -> bool:
+    """Check terminal syntax coverage, not whether the command is safe.
+
+    The AST parser must already have parsed this command. Supported command-list
+    syntax is covered generically without hardcoding executable names. Dynamic
+    or unsupported shell features remain indeterminate. Inline Python is narrower:
+    only literal-only print() statements qualify.
+    """
     stripped = command.strip()
     if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(stripped):
         return True
-    if not stripped or not _quoted_command_has_no_shell_control_syntax(stripped):
+    if not stripped or not _has_only_supported_shell_syntax(stripped):
         return False
     try:
         words = shlex.split(stripped, posix=True)
@@ -209,16 +229,17 @@ class ShellEvidenceModule(EvidenceModule):
         extracted = ast_parse.extract_words(cmd, parser_dialect)
         if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
             # bashlex is only a POSIX-compatible approximation for zsh/dash.
-            # Quoted arguments are accepted only when unquoted shell control/
-            # expansion syntax is absent. Inline Python -c code is narrower:
-            # only literal-only print() expressions qualify; other code remains
-            # indeterminate even if its outer shell command parses cleanly.
-            if _is_simple_terminal_command(cmd):
+            # The AST must parse the command. Supported command-list syntax is
+            # covered generically, while expansions/substitutions, redirections,
+            # pipelines and other unsupported features remain indeterminate.
+            # Inline Python -c code is narrower: only literal-only print()
+            # expressions qualify; other code remains indeterminate.
+            if _is_constrained_terminal_command(cmd):
                 coverage = "partial"
                 claim = (
                     f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
                     f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
-                    "constrained single-command syntax only"
+                    "constrained terminal syntax subset"
                 )
                 confidence = 0.65
             else:
