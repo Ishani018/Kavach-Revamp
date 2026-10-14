@@ -96,7 +96,7 @@ function formatDecision(scenario, input) {
     const evidence = ids.length ? ids.map(prettyRule).join('; ') : 'No specific rule ID reported';
     return '| ' + name + ' | **' + minister.verdict + '** | ' + evidence + ' | ' + ministerExplanation(name, minister) + ' |';
   });
-  return [
+  const lines = [
     '# ' + status + ' · ' + decision.decided_by,
     '',
     '> LIVE API RESULT · SYNTHETIC PRE-FLIGHT INSPECTION',
@@ -113,11 +113,13 @@ function formatDecision(scenario, input) {
     '`Proposed call` → `VAULT` → `EXECUTOR` → `CHANNEL` → `NAVIGATOR` → `Speaker`',
     '',
     '**What happened:** Kavach evaluated a synthetic tool-call record through the local `/check` API. **This chat demo did not execute the scenario command and does not prove the VS Code pre-tool hook enforced it.**',
-    '',
-    scenario.expectedNote ? '**Demo note:** ' + scenario.expectedNote : '',
-    '',
-    'Use `/why` for the last API result, or `/compare` to run all three controlled cases.'
-  ].filter(Boolean).join('\n');
+    ''
+  ];
+  if (scenario.expectedNote) {
+    lines.push('**Demo note:** ' + scenario.expectedNote, '');
+  }
+  lines.push('Use `/why` for the last API result, or `/compare` to run all three controlled cases.');
+  return lines.join('\n');
 }
 
 function formatComparison(results) {
