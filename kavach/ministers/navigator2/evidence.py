@@ -93,6 +93,40 @@ def _has_only_supported_shell_syntax(command: str) -> bool:
     return quote is None and not escaped
 
 
+def _python_inline_code_is_static_print(words: List[str]) -> bool:
+    """Recognize only literal-only Python -c print statements as harmless syntax.
+
+    A shell AST cannot prove the effects of embedded interpreter code. Imports,
+    attribute calls, assignments, dynamic values, and all other code stay
+    indeterminate even if the outer shell command parses cleanly.
+    """
+    if not words:
+        return False
+    executable = words[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if not re.fullmatch(r"python(?:3(?:\\.\\d+)?)?", executable):
+        return True
+    if "-c" not in words[1:]:
+        return True
+    code_index = words.index("-c") + 1
+    if code_index >= len(words):
+        return False
+    try:
+        parsed = ast.parse(words[code_index])
+    except (SyntaxError, ValueError, TypeError):
+        return False
+    if not parsed.body:
+        return False
+    for statement in parsed.body:
+        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+            return False
+        call = statement.value
+        if not isinstance(call.func, ast.Name) or call.func.id != "print" or call.keywords:
+            return False
+        if not all(isinstance(argument, ast.Constant) for argument in call.args):
+            return False
+    return True
+
+
 def _is_constrained_terminal_command(command: str) -> bool:
     """Check terminal syntax coverage, not whether the command is safe.
 
