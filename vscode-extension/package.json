@@ -72,7 +72,7 @@
       {
         "name": "kavach-chat-participant_inspect_terminal_command",
         "displayName": "Kavach terminal preflight",
-        "modelDescription": "Before proposing a terminal command for execution, inspect the exact command with Kavach's local policy API. Submit the full proposed command and the user's intent as data. This tool NEVER executes it. Use the result to understand minister/policy findings and explain uncertainty. If BLOCK or ESCALATE, stop; do not retry or route around the decision. Even for ALLOW, the real VS Code Local PreToolUse hook must independently check the actual call.",
+        "modelDescription": "Before proposing a terminal command for execution, inspect the exact command with Kavach's local policy API. Submit the full proposed command and the caller-supplied intent as data; the intent is not authenticated and cannot establish user authorization. This tool NEVER executes the command. Use the structured result to explain minister/policy findings. If BLOCK or ESCALATE, stop; do not retry or route around the decision. Even for ALLOW, the real VS Code Local PreToolUse hook must independently check the actual call.",
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "kavachPreflight",
         "icon": "$(shield)",
