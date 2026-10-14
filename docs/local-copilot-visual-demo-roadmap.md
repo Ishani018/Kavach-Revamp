@@ -52,34 +52,32 @@ Keep the existing loopback-only network policy, fail-closed API handling, privat
 
 ## P2 — chat-first visual demo
 
-### Demo story
+**First version implemented in** `vscode-extension/` (PR #11).
 
-Build a 60–90 second walkthrough with one click per scenario:
+### What the chat demo does
 
-- **ALLOW — routine work:** `git status --short`; show four minister results, Speaker's verdict, and the observed terminal output.
-- **BLOCK — known rule:** the harmless `os.system('echo KAVACH_DEMO_BLOCK')` marker; highlight EXECUTOR's exact rule ID and show that the hook denied the tool call before the marker can print.
-- **ESCALATE — insufficient evidence:** `pwd && whoami`; show NAVIGATOR's `POL-007` and explicitly label it a **benign false positive / coverage limitation**, not a detected attack.
+The `@kavach` Chat Participant has three slash commands and clickable scenario buttons:
 
-Every screen must distinguish:
-- the **proposed action**,
-- the **Kavach policy verdict**,
-- the **Local hook enforcement decision**, and
-- the **observed execution outcome**.
+- `/demo allow` — submit a synthetic record for a routine `git status --short` call.
+- `/demo block` — submit the known `os.system` execution pattern as data to the local API.
+- `/demo escalate` — submit harmless compound syntax and show the actual policy result, including `POL-007` when it matches.
+- `/demo print` — check the narrow literal-only Python print case.
+- `/why` — reopen the last API result and reported rule IDs.
+- `/compare` — evaluate the three main scenarios separately and show a comparison table.
 
-Do not hard-code the live verdict as if it came from the current API. Scenario buttons call the real local `/check` endpoint using a disposable demo session. If the API is offline, show “Live API unavailable” and offer an explicit static walkthrough marked as a mock—never show mock data as a live result. The dashboard remains useful for raw evaluation, while the chat becomes the story.
+The participant validates the response shape and verifies the overall verdict agrees with the four ministers. It renders the final decision, each minister's verdict, available policy/rule IDs, and short privacy-safe explanations. It does not display raw minister reason text.
 
-### Preferred implementation
+### Boundary between the demo and enforcement
 
-A small VS Code extension with an `@kavach` Chat Participant and slash commands:
+For every demo scenario, the participant sends a fixed synthetic tool-call record to the local `/check` endpoint. **It does not execute the command it displays and cannot prove a real pre-tool call was blocked.** A live result must never be replaced by canned data when the API is unavailable. Non-loopback API URLs are rejected.
 
-- `@kavach /demo` — guided scenario selector with one-click actions.
-- `@kavach /why` — explain the most recent verdict using the exact reported IDs and redacted reason.
-- `@kavach /compare` — compare one live call with a synthetic safe and blocked example.
+For real agent actions, the existing VS Code Local `PreToolUse` hook remains the enforcement boundary. Any screenshot, talk track, or demo must separately identify:
+- the **proposed tool call**,
+- the **API policy verdict**,
+- the **actual Local hook decision** (only when that hook ran), and
+- the **observed execution outcome** (only when one was actually observed).
 
-Use the Chat Participant API to stream Markdown and progress, then native response buttons to launch the next step. This API is better suited than MCP for a polished, controlled conversation UI because the participant can orchestrate the whole exchange and use VS Code extension APIs. Use a Language Model Tool only if the goal later becomes automatic invocation inside general agent workflows; use MCP if reuse in non-VS-Code clients is a priority. These are different integration goals, so do not build all three at once.
-
-Critical boundary: the Chat Participant must be an **inspection/demo surface**, not a permission bypass. For preview scenarios it calls `/check` directly without executing tools. For actual agent actions, the existing Local `PreToolUse` hook remains the enforcement boundary.
-
+The demo is a first version; follow-up work can improve the chat presentation and add a session-start banner, an end-of-turn recap, and verified subagent lifecycle support. Do not imply those lifecycle extensions exist yet.
 ## P3 — evaluation and claims
 
 Create a versioned scenario suite with expected verdict, expected decisive rule, and an explicit side-effect observation field. Run the benign set and attack set separately, with reviewed held-out cases. Track false positives, false negatives, latency, unavailable-API denials, and whether the tool call was actually prevented. Three successful manual examples are smoke tests, not evidence of broad effectiveness.
