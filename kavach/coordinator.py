@@ -18,7 +18,9 @@ import logging
 from typing import Any, Dict, Mapping, Sequence, Union
 
 from . import speaker
-from .schemas import MINISTER_NAMES, VERDICTS, Decision, MinisterResult, ToolCall
+from .schemas import (
+    MINISTER_NAMES, VERDICTS, Decision, MinisterResult, Observation, ObservationDecision, ToolCall,
+)
 
 log = logging.getLogger("kavach.coordinator")
 
@@ -47,6 +49,46 @@ class Coordinator:
             reason=sv.reason,
             decided_by=sv.decided_by,
             session_id=call.session_id,
+            ministers=results,
+        )
+
+    def observe(self, obs: Union[Observation, Mapping[str, Any]]) -> ObservationDecision:
+        """Show every minister that has an observe() method a hook observation
+        (a submitted prompt or a finished tool call's output), in the same fixed
+        order as evaluate(), each seeing the earlier ministers' results. A
+        minister returning None had nothing to report. A minister that raises or
+        returns a malformed result is recorded as ESCALATE, as in evaluate()."""
+        if not isinstance(obs, Observation):
+            obs = Observation.model_validate(obs)
+
+        results: Dict[str, MinisterResult] = {}
+        for m in self._ministers:
+            hook = getattr(m, "observe", None)
+            if not callable(hook):
+                continue
+            try:
+                r = hook(obs, dict(results))
+            except Exception as e:
+                log.error("minister %s raised %s while observing; failing closed", m.name, type(e).__name__)
+                results[m.name] = _failure(m.name, f"raised {type(e).__name__}")
+                continue
+            if r is None:
+                continue
+            if not (isinstance(r, MinisterResult) and r.minister == m.name and r.verdict in VERDICTS):
+                log.error("minister %s returned a malformed observation; failing closed", m.name)
+                r = _failure(m.name, "returned a malformed result")
+            results[m.name] = r
+
+        if results:
+            sv = speaker.decide(results.values(), required=tuple(results))
+        else:
+            sv = speaker.SpeakerVerdict("ALLOW", "Speaker", "no minister reported on this observation")
+        return ObservationDecision(
+            event=obs.event,
+            verdict=sv.verdict,
+            reason=sv.reason,
+            decided_by=sv.decided_by,
+            session_id=obs.session_id,
             ministers=results,
         )
 

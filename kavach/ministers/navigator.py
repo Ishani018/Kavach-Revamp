@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .navigator2 import Navigator2
-from ..schemas import MinisterResult, ToolCall
+from ..schemas import MinisterResult, Observation, ToolCall
 
 
 class NavigatorMinister:
@@ -28,6 +28,22 @@ class NavigatorMinister:
 
     def check(self, call: ToolCall) -> MinisterResult:
         return self.check_with_context(call, {})
+
+    def observe(self, obs: Observation, prior_results: Dict[str, MinisterResult]) -> Optional[MinisterResult]:
+        """Record a tool output that VAULT found secret material in, so POL-009
+        sees it as a prior sensitive read. Other observations add nothing to the
+        ledger: every extra event lengthens the history Invariant evaluates."""
+        vault = prior_results.get("VAULT")
+        if obs.event != "PostToolUse" or vault is None or vault.verdict != "BLOCK":
+            return None
+        event = self.navigator2.record_sensitive_output(obs.session_id, obs.tool_name or "unknown_tool")
+        return MinisterResult(
+            minister=self.name,
+            verdict="ALLOW",
+            reason="NAVIGATOR recorded a sensitive tool output for cross-call policy POL-009",
+            matched_id="NAVIGATOR-OBSERVED:sensitive-output",
+            diagnostics={"engine": "invariant-localpolicy", "event_id": event.event_id},
+        )
 
     def check_with_context(
         self, call: ToolCall, prior_results: Dict[str, MinisterResult]

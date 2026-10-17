@@ -39,6 +39,7 @@ VALID_VERDICTS = {"ALLOW", "BLOCK", "ESCALATE"}
 MINISTER_ORDER = ("VAULT", "EXECUTOR", "CHANNEL", "NAVIGATOR")
 MAX_REPORT_CHARS = 3_500
 MAX_MINISTER_NOTE_CHARS = 220
+MAX_OBSERVED_CHARS = 1_000_000
 NAVIGATOR_POLICY_TITLES = {
     "POL-001": "proven-exfil-to-unauthorized-destination",
     "POL-002": "contract-scope-violation",
@@ -251,7 +252,7 @@ def _load_prompt(event: dict[str, Any], data_home: Path) -> str | None:
         return None
 
 
-def _local_check_url() -> str:
+def _local_api_url(path: str) -> str:
     base = os.environ.get("KAVACH_LOCAL_API_URL", DEFAULT_API_URL).strip().rstrip("/")
     parsed = urlsplit(base)
     # Avoid leaking code, prompts, tool inputs, or decisions to a remote endpoint.
@@ -269,11 +270,14 @@ def _local_check_url() -> str:
         _ = parsed.port
     except ValueError as exc:
         raise ValueError("KAVACH_LOCAL_API_URL has an invalid port.") from exc
-    return base + "/check"
+    return base + path
 
 
-def _post_check(payload: dict[str, Any]) -> dict[str, Any]:
-    url = _local_check_url()
+def _local_check_url() -> str:
+    return _local_api_url("/check")
+
+
+def _post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     request = Request(
         url,
         data=json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
@@ -294,6 +298,14 @@ def _post_check(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise RuntimeError("Kavach local API returned an invalid decision.")
     return result
+
+
+def _post_check(payload: dict[str, Any]) -> dict[str, Any]:
+    return _post_json(_local_check_url(), payload)
+
+
+def _post_observe(payload: dict[str, Any]) -> dict[str, Any]:
+    return _post_json(_local_api_url("/observe"), payload)
 
 
 def _fingerprint(tool_name: str, tool_input: dict[str, Any]) -> str:
@@ -510,35 +522,194 @@ def _handle_pre_tool_use(
         return _deny(message + " The tool was not allowed to run.")
 
 
+def _observed_text(value: Any) -> str:
+    """Tool output as text for inspection; structured outputs are serialized."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, ensure_ascii=False, default=str)
+        except (TypeError, ValueError):
+            text = str(value)
+    return text[:MAX_OBSERVED_CHARS]
+
+
+def _validated_observation(result: Any) -> tuple[str, dict[str, Any]]:
+    """Check an /observe reply the same way PreToolUse checks /check replies,
+    except that only the ministers which reported are present."""
+    if not isinstance(result, dict):
+        raise RuntimeError("Kavach returned an invalid observation.")
+    verdict = result.get("verdict")
+    ministers = result.get("ministers")
+    if verdict not in VALID_VERDICTS or not isinstance(ministers, dict):
+        raise RuntimeError("Kavach returned an invalid observation.")
+    if not set(ministers) <= set(MINISTER_ORDER):
+        raise RuntimeError("Kavach returned an unexpected minister in an observation.")
+    verdicts = []
+    for item in ministers.values():
+        value = item.get("verdict") if isinstance(item, dict) else None
+        if value not in VALID_VERDICTS:
+            raise RuntimeError("Kavach returned an invalid minister verdict.")
+        verdicts.append(value)
+    expected = "BLOCK" if "BLOCK" in verdicts else "ESCALATE" if "ESCALATE" in verdicts else "ALLOW"
+    if verdict != expected:
+        raise RuntimeError("Kavach returned an inconsistent observation verdict.")
+    return verdict, ministers
+
+
+def _observation_report(title: str, verdict: str, ministers: dict[str, Any]) -> str:
+    lines = [title, f"Verdict: {verdict}", "Findings (prompt text, tool output and secret values are withheld):"]
+    for name in MINISTER_ORDER:
+        item = ministers.get(name)
+        if not isinstance(item, dict):
+            continue
+        ids = _rule_ids(item)
+        rules = "; ".join(ids) if ids else "no specific rule ID reported"
+        lines.append(f"- {name}: {item.get('verdict')} | Rule: {rules}")
+    return "\n".join(lines)[:MAX_REPORT_CHARS]
+
+
+def _observation_audit(event: dict[str, Any], *, data_home: Path, tool_name: str, text: str,
+                       verdict: str, ministers: dict[str, Any] | None) -> None:
+    record = _audit_base(event, data_home=data_home, tool_name=tool_name)
+    record.update({
+        "verdict": verdict,
+        "observed_chars": len(text),
+        "minister_summary": [
+            name + "=" + str(item.get("verdict")) + (
+                " (" + "; ".join(_rule_ids(item))[:200] + ")" if _rule_ids(item) else ""
+            )
+            for name, item in (ministers or {}).items() if isinstance(item, dict)
+        ],
+    })
+    if event.get("hook_event_name") == "PostToolUse":
+        record["execution"] = "completed"
+    try:
+        _audit(data_home, record)
+    except OSError:
+        pass
+
+
+def _handle_user_prompt_submit(
+    event: dict[str, Any],
+    data_home: Path,
+    observe_call: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    def store() -> None:
+        try:
+            _store_prompt(event, data_home)
+        except OSError:
+            # Missing context can only make policy stricter; never block the prompt for this.
+            pass
+
+    sid = _session_id(event)
+    prompt = event.get("prompt")
+    if not sid or not isinstance(prompt, str) or not prompt.strip():
+        store()
+        return {"continue": True}
+    try:
+        verdict, ministers = _validated_observation(observe_call({
+            "event": "UserPromptSubmit",
+            "session_id": sid,
+            "text": prompt[:MAX_OBSERVED_CHARS],
+        }))
+    except Exception as exc:
+        # An unavailable service must not stop the user typing; every tool call
+        # the prompt leads to still goes through the fail-closed PreToolUse check.
+        message = str(exc) if str(exc).startswith("Kavach ") else "Kavach local check failed."
+        _observation_audit(event, data_home=data_home, tool_name="(prompt)", text=prompt,
+                           verdict="ERROR", ministers=None)
+        store()
+        return {"continue": True, "systemMessage": message + " The prompt was not inspected."}
+    _observation_audit(event, data_home=data_home, tool_name="(prompt)", text=prompt,
+                       verdict=verdict, ministers=ministers)
+    if verdict != "BLOCK":
+        store()
+        return {"continue": True}
+    # A blocked prompt is never saved as session context: it holds a secret.
+    reason = (
+        "Kavach stopped this prompt before it reached the model: it contains secret material "
+        "(see rule IDs below). Remove the secret, or reference it by name instead of value, and resend."
+    )
+    report = _observation_report("KAVACH PROMPT REVIEW", verdict, ministers)
+    return {
+        "decision": "block",
+        "reason": reason,
+        "continue": False,
+        "stopReason": reason,
+        "systemMessage": reason + "\n" + report,
+    }
+
+
+def _handle_post_tool_use(
+    event: dict[str, Any],
+    data_home: Path,
+    observe_call: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    tool_name = event.get("tool_name")
+    sid = _session_id(event)
+    if not isinstance(tool_name, str) or not tool_name.strip() or not sid:
+        return {"continue": True}
+    tool_name = tool_name.strip()[:128]
+    tool_input = event.get("tool_input")
+    raw_output = next(
+        (event[key] for key in ("tool_response", "tool_output", "tool_result") if key in event), None
+    )
+    text = _observed_text(raw_output)
+    try:
+        verdict, ministers = _validated_observation(observe_call({
+            "event": "PostToolUse",
+            "session_id": sid,
+            "tool_name": tool_name,
+            "arguments": tool_input if isinstance(tool_input, dict) else {},
+            "text": text,
+        }))
+    except Exception as exc:
+        # The tool already ran; a post-hook cannot undo it. Say plainly that its
+        # output was not inspected, so later decisions lack that evidence.
+        message = str(exc) if str(exc).startswith("Kavach ") else "Kavach local check failed."
+        _observation_audit(event, data_home=data_home, tool_name=tool_name, text=text,
+                           verdict="ERROR", ministers=None)
+        return {"continue": True, "systemMessage": message + " This tool's output was not inspected."}
+    _observation_audit(event, data_home=data_home, tool_name=tool_name, text=text,
+                       verdict=verdict, ministers=ministers)
+    if verdict == "ALLOW":
+        return {"continue": True}
+    report = _observation_report("KAVACH POST-TOOL REVIEW", verdict, ministers)
+    if verdict == "BLOCK":
+        reason = (
+            "Kavach: the output of %s contains secret material. Do not repeat, store, or transmit "
+            "it; refer to it only by name. The session is now treated as holding sensitive data, "
+            "so sends to unverified destinations will be blocked." % tool_name
+        )
+    else:
+        reason = "Kavach could not fully inspect the output of %s; treat it with caution." % tool_name
+    return {
+        "decision": "block",
+        "reason": reason,
+        "hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": report},
+        "systemMessage": reason + "\n" + report,
+    }
+
+
 def process_event(
     event: dict[str, Any],
     *,
     api_call: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    observe_call: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     data_home: str | Path | None = None,
 ) -> dict[str, Any]:
     """Convert a VS Code Local hook event into the documented decision JSON."""
     home = _home(data_home)
     event_name = event.get("hook_event_name")
     if event_name == "UserPromptSubmit":
-        try:
-            _store_prompt(event, home)
-        except OSError:
-            # Missing context can only make policy stricter; never block the prompt itself.
-            pass
-        return {"continue": True}
+        return _handle_user_prompt_submit(event, home, observe_call or _post_observe)
     if event_name == "PreToolUse":
         return _handle_pre_tool_use(event, home, api_call or _post_check)
     if event_name == "PostToolUse":
-        tool_name = event.get("tool_name")
-        if isinstance(tool_name, str) and tool_name:
-            record = _audit_base(event, data_home=home, tool_name=tool_name)
-            record.update({"verdict": "EXECUTED", "execution": "completed"})
-            try:
-                _audit(home, record)
-            except OSError:
-                # The action has already executed; a post-hook cannot undo it.
-                pass
-        return {"continue": True}
+        return _handle_post_tool_use(event, home, observe_call or _post_observe)
     # This script is registered only for the three events above. If VS Code
     # invokes it with an unknown/malformed event name, never silently permit a
     # potentially pre-execution event.

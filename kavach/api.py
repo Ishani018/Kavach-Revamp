@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .coordinator import Coordinator
-from .schemas import MINISTER_NAMES, Decision, ToolCall
+from .schemas import MINISTER_NAMES, Decision, Observation, ObservationDecision, ToolCall
 
 log = logging.getLogger("kavach.api")
 WEB_INDEX = Path(__file__).resolve().parents[1] / "web" / "index.html"
@@ -274,7 +274,11 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
     def check(call: ToolCall) -> Decision:
         return state["coordinator"].evaluate(call)
 
+    def observe(obs: Observation) -> ObservationDecision:
+        return state["coordinator"].observe(obs)
+
     app.post("/check", response_model=Decision)(check)
+    app.post("/observe", response_model=ObservationDecision)(observe)
     app.post("/hook/parliament", response_model=Decision, include_in_schema=False)(check)
     return app
 

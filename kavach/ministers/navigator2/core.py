@@ -26,7 +26,7 @@ from .ledger import SessionEventLedger
 from .policy import PolicyEngine, PolicyFacts
 from .invariant_policy import InvariantPolicyEngine
 from .reasoner import DeterministicMockProvider, ReasonerFabricationError, TrajectoryReasonerProvider, validate_response
-from .schemas import ConfidentialityLabel, EvidenceFinding, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
+from .schemas import ConfidentialityLabel, EvidenceFinding, IntegrityLabel, Navigator2Verdict, ReasonerRequest, ReasonerResponse, SessionEvent, merge_confidentiality
 from . import verdict as verdict_mod
 
 # No LLM, no network call, and no mandatory external dependency is reachable
@@ -228,6 +228,26 @@ class Navigator2:
             return None, True
         finally:
             ex.shutdown(wait=False)  # never block the caller on a hung provider thread
+
+    def record_sensitive_output(self, session_id: str, tool_name: str) -> SessionEvent:
+        """Append an observation that `tool_name`'s OUTPUT held secret material.
+
+        The earlier proposed call may have looked harmless (e.g. reading
+        notes.txt), so its own event was not labelled sensitive. This event is
+        what lets POL-009 block a later send to an unapproved destination.
+        artifacts_read names the output, not a path: no raw content is stored."""
+        prior = self.ledger.all_events(session_id)
+        seq = self.ledger.next_seq(session_id)
+        event = SessionEvent(
+            session_id=session_id, event_id=self.ledger.make_event_id(session_id, seq), seq=seq,
+            timestamp=time.time(), parent_event_ids=[prior[-1].event_id] if prior else [],
+            tool_name=tool_name, source_kind="tool_output",
+            integrity=IntegrityLabel.UNTRUSTED_EXTERNAL, confidentiality=ConfidentialityLabel.SECRET,
+            artifacts_read=["tool_output:" + tool_name], notes=["observed: secret material in tool output"],
+            disposition="observed",
+        )
+        self.ledger.append(event)
+        return event
 
     def check(
         self,

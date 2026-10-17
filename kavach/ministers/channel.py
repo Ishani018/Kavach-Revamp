@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Dict, Optional
 
 from . import channel_taint as ct, scan_to_result
-from ..schemas import MinisterResult, ToolCall
+from ..schemas import MinisterResult, Observation, ToolCall
 
 
 def _opt_str(ctx: dict, key: str) -> Optional[str]:
@@ -51,3 +51,37 @@ class ChannelMinister:
 
         chosen = taint_scan if taint_scan is not None else prov_scan
         return scan_to_result(chosen, self.name)
+
+    def observe(self, obs: Observation, prior_results: Dict[str, MinisterResult]) -> Optional[MinisterResult]:
+        """Update session state from a hook observation; never blocks on its own.
+
+        UserPromptSubmit: every prompt is trusted user input, so its destination
+        values join USER_SUPPLIED (check() alone only reads the first prompt).
+        PostToolUse: the output's destination values become OUTPUT_DERIVED for
+        later calls, and secret material in the output (VAULT BLOCK) taints the
+        session, so a later send to an unverified destination is blocked."""
+        prov = self._provenance.setdefault(obs.session_id, ct.new_provenance_state())
+        if obs.event == "UserPromptSubmit":
+            prov.user_candidates |= ct._extract_candidate_values(obs.text)
+            prov.user_instruction_seen = True
+            return None
+
+        tool = obs.tool_name or "unknown_tool"
+        for cand in ct._extract_candidate_values(obs.text):
+            prov.output_candidates.setdefault(cand, (tool, max(prov.turn, 0)))
+
+        vault = prior_results.get("VAULT")
+        if vault is None or vault.verdict != "BLOCK":
+            return None
+        taint = self._taint.setdefault(obs.session_id, ct.new_taint_state())
+        if not taint.tainted:
+            taint.tainted = True
+            taint.source_tool = tool
+            taint.source_matched_id = "CHANNEL-TAINT-SOURCE:secret-in-output"
+        return MinisterResult(
+            minister=self.name,
+            verdict="ALLOW",
+            reason="CHANNEL tainted the session: a tool output contained secret material",
+            matched_id="CHANNEL-TAINT-SOURCE:secret-in-output",
+            diagnostics={"level": "deterministic", "tainted": True},
+        )

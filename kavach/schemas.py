@@ -94,3 +94,46 @@ class Decision(BaseModel):
     decided_by: str
     session_id: str
     ministers: Dict[str, MinisterResult]
+
+
+# Hook events that report something that already happened (a submitted prompt,
+# a completed tool call) rather than proposing an action. Ministers inspect the
+# content and update session state; nothing here can un-run a tool.
+OBSERVATION_EVENTS = ("UserPromptSubmit", "PostToolUse")
+MAX_OBSERVED_TEXT_CHARS = 2_000_000
+
+
+class Observation(BaseModel):
+    event: str
+    session_id: str = Field(min_length=1)
+    # The prompt text (UserPromptSubmit) or the tool's output (PostToolUse).
+    text: str = Field(default="", max_length=MAX_OBSERVED_TEXT_CHARS)
+    # PostToolUse only: the call that produced `text`.
+    tool_name: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("event")
+    @classmethod
+    def _known_event(cls, v: str) -> str:
+        if v not in OBSERVATION_EVENTS:
+            raise ValueError(f"event must be one of {OBSERVATION_EVENTS}")
+        return v
+
+    @model_validator(mode="after")
+    def _tool_for_post_tool_use(self) -> "Observation":
+        if self.event == "PostToolUse" and not (self.tool_name and self.tool_name.strip()):
+            raise ValueError("PostToolUse observations need tool_name")
+        return self
+
+
+class ObservationDecision(BaseModel):
+    """Same shape as Decision, plus the event. `ministers` holds only the
+    ministers that inspect this event type; ALLOW means none of them found
+    anything, not that all four were consulted."""
+
+    event: str
+    verdict: str
+    reason: str
+    decided_by: str
+    session_id: str
+    ministers: Dict[str, MinisterResult]
