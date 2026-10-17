@@ -17,13 +17,12 @@ policy.py's POL-007).
 
 from __future__ import annotations
 
-import ast
 import os
 import re
-import shlex
 from typing import Dict, List, Optional
 
 from .. import ast_parse
+from . import shell_coverage
 from ...schemas import MinisterResult, ToolCall
 from .schemas import EvidenceFinding
 
@@ -40,91 +39,6 @@ _POWERSHELL_DIALECTS = frozenset({"powershell"})
 _TERMINAL_WRAPPER_NAMES = frozenset({"run_in_terminal", "runinterminal", "run_terminal"})
 # zsh and dash use a POSIX-compatible parser approximation, never claimed as full coverage.
 _POSIX_APPROXIMATION_DIALECTS = frozenset({"zsh", "dash"})
-# Fast path for unquoted, simple portable commands.
-_SIMPLE_PORTABLE_COMMAND_RE = re.compile(r"^[A-Za-z0-9_./:@%+,-]+(?:[ \t]+[A-Za-z0-9_./:@%+,-]+)*$")
-_SHELL_CONTROL_CHARS = frozenset("|&;<>$\x60*?[]{}()")
-
-def _quoted_command_has_no_shell_control_syntax(command: str) -> bool:
-    """Permit ordinary quoting only when it cannot hide shell expansion/control flow.
-
-    This is deliberately a small lexer, not a shell parser. bashlex must also
-    successfully parse the call; this check only distinguishes literal quotes
-    from unquoted operators and shell expansions in the zsh/dash approximation.
-    """
-    quote = None
-    escaped = False
-    for char in command.strip():
-        if escaped:
-            escaped = False
-            continue
-        if quote == "'":
-            if char == "'":
-                quote = None
-            continue
-        if quote == '"':
-            if char == "\\":
-                escaped = True
-            elif char == '"':
-                quote = None
-            elif char in "$\x60":
-                return False
-            continue
-        if char == "\\":
-            escaped = True
-        elif char in ("'", '"'):
-            quote = char
-        elif char in _SHELL_CONTROL_CHARS or char in "\r\n":
-            return False
-    return quote is None and not escaped
-
-
-def _python_inline_code_is_static_print(words: List[str]) -> bool:
-    """Recognize only literal-only Python -c print statements as harmless.
-
-    A shell AST alone says nothing about the meaning of code passed to an
-    interpreter. This strict subset is just enough for the benign print demo;
-    imports, attribute calls, assignments, dynamic values, and all other code
-    remain indeterminate and continue to fail closed.
-    """
-    if not words:
-        return False
-    executable = words[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if not re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable):
-        return True
-    if "-c" not in words[1:]:
-        return True
-    code_index = words.index("-c") + 1
-    if code_index >= len(words):
-        return False
-    try:
-        parsed = ast.parse(words[code_index])
-    except (SyntaxError, ValueError, TypeError):
-        return False
-    if not parsed.body:
-        return False
-    for statement in parsed.body:
-        if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
-            return False
-        call = statement.value
-        if not isinstance(call.func, ast.Name) or call.func.id != "print" or call.keywords:
-            return False
-        if not all(isinstance(argument, ast.Constant) for argument in call.args):
-            return False
-    return True
-
-
-def _is_simple_terminal_command(command: str) -> bool:
-    """Return true only for a single, parseable command in a constrained subset."""
-    stripped = command.strip()
-    if _SIMPLE_PORTABLE_COMMAND_RE.fullmatch(stripped):
-        return True
-    if not stripped or not _quoted_command_has_no_shell_control_syntax(stripped):
-        return False
-    try:
-        words = shlex.split(stripped, posix=True)
-    except ValueError:
-        return False
-    return bool(words) and _python_inline_code_is_static_print(words)
 
 _DECODE_COMMANDS = re.compile(r"^(base64|base32|base16|xxd)$", re.IGNORECASE)
 _DECODE_FLAG = re.compile(r"^-?-?d(ecode)?$", re.IGNORECASE)
@@ -207,27 +121,32 @@ class ShellEvidenceModule(EvidenceModule):
         cmd, dialect = found
         parser_dialect = _parser_dialect(dialect)
         extracted = ast_parse.extract_words(cmd, parser_dialect)
-        if extracted.used_ast and dialect in _POSIX_APPROXIMATION_DIALECTS:
-            # bashlex is only a POSIX-compatible approximation for zsh/dash.
-            # Quoted arguments are accepted only when unquoted shell control/
-            # expansion syntax is absent. Inline Python -c code is narrower:
-            # only literal-only print() expressions qualify; other code remains
-            # indeterminate even if its outer shell command parses cleanly.
-            if _is_simple_terminal_command(cmd):
-                coverage = "partial"
-                claim = (
-                    f"parsed using {parser_dialect} AST as a POSIX-compatible approximation "
-                    f"for terminal shell {dialect} ({len(extracted.words)} argument words); "
-                    "constrained single-command syntax only"
-                )
-                confidence = 0.65
-            else:
-                coverage = "indeterminate"
-                claim = (
-                    f"terminal shell {dialect} command uses syntax outside the simple portable subset; "
-                    "shell-specific or compound semantics remain unverified"
-                )
-                confidence = 0.0
+        approximation = dialect in _POSIX_APPROXIMATION_DIALECTS
+        posix = extracted.used_ast and parser_dialect in _SHELL_DIALECTS
+        structure = shell_coverage.analyze(cmd, approximation=approximation) if posix else None
+        if structure is not None and not structure.covered:
+            # The grammar parsed, but part of what will run is not visible in
+            # the text (nested code Kavach cannot parse, runtime-built commands,
+            # control flow, ...). See shell_coverage.py.
+            coverage = "indeterminate"
+            claim = (
+                f"{dialect} command parsed, but not everything it runs is visible: "
+                + "; ".join(structure.reasons[:4])
+            )
+            confidence = 0.0
+        elif structure is not None and (approximation or structure.nested):
+            # Covered, but either through bashlex's POSIX approximation of
+            # zsh/dash, or with nested programs analyzed in their own language.
+            coverage = "partial"
+            how = (f"{parser_dialect} AST as a POSIX-compatible approximation for terminal shell {dialect}"
+                   if approximation else f"real {dialect} grammar")
+            nested = f"; nested code analyzed: {', '.join(sorted(set(structure.nested)))}" if structure.nested else ""
+            claim = f"parsed using {how} ({len(extracted.words)} argument words); every part is visible{nested}"
+            confidence = 0.65
+        elif structure is not None:
+            coverage = "full"
+            claim = f"parsed via real {dialect} grammar ({len(extracted.words)} argument words); every part is visible"
+            confidence = 1.0
         elif extracted.used_ast:
             coverage = "full"
             claim = f"parsed via real {dialect} grammar ({len(extracted.words)} argument words)"
