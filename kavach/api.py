@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .agents import AgentLinkError
 from .coordinator import Coordinator
 from .schemas import MINISTER_NAMES, Decision, Observation, ObservationDecision, ToolCall
 
@@ -275,7 +276,10 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
         return state["coordinator"].evaluate(call)
 
     def observe(obs: Observation) -> ObservationDecision:
-        return state["coordinator"].observe(obs)
+        try:
+            return state["coordinator"].observe(obs)
+        except AgentLinkError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
 
     app.post("/check", response_model=Decision)(check)
     app.post("/observe", response_model=ObservationDecision)(observe)

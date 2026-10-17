@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from ..schemas import MinisterResult
+from ..schemas import CONTENT_EVENTS, MinisterResult, Observation
 
 if TYPE_CHECKING:
     from .retrieval import MinisterScan
@@ -36,6 +36,19 @@ def scan_to_result(scan: Optional[MinisterScan], name: str, *, redact_match: boo
             "mode": scan.retrieval_mode,
         },
     )
+
+
+def observed_source(obs: Observation) -> Optional[str]:
+    """Where an observation's text came from, as a stable label for attribution,
+    or None when it carries no inspectable content (lifecycle events) or is the
+    user's own prompt."""
+    if obs.event not in CONTENT_EVENTS or obs.event == "UserPromptSubmit":
+        return None
+    if obs.event == "PostToolUse":
+        return obs.tool_name or "unknown_tool"
+    if obs.event == "SubagentStop":
+        return "subagent:" + (obs.agent_type or obs.agent_id or "unknown")
+    return "final_answer"
 
 
 def __getattr__(name: str):

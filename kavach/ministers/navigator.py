@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from . import observed_source
 from .navigator2 import Navigator2
 from ..schemas import MinisterResult, Observation, ToolCall
 
@@ -30,20 +31,30 @@ class NavigatorMinister:
         return self.check_with_context(call, {})
 
     def observe(self, obs: Observation, prior_results: Dict[str, MinisterResult]) -> Optional[MinisterResult]:
-        """Record a tool output that VAULT found secret material in, so POL-009
-        sees it as a prior sensitive read. Other observations add nothing to the
-        ledger: every extra event lengthens the history Invariant evaluates."""
+        """Record content VAULT found secret material in (a tool's output, a
+        sub-agent's report, the final answer), so POL-009 sees it as a prior
+        sensitive read. Other observations add nothing to the ledger: every
+        extra event lengthens the history Invariant evaluates."""
+        source = observed_source(obs)
         vault = prior_results.get("VAULT")
-        if obs.event != "PostToolUse" or vault is None or vault.verdict != "BLOCK":
+        if source is None or vault is None or vault.verdict != "BLOCK":
             return None
-        event = self.navigator2.record_sensitive_output(obs.session_id, obs.tool_name or "unknown_tool")
+        event = self.navigator2.record_sensitive_output(obs.session_id, source)
         return MinisterResult(
             minister=self.name,
             verdict="ALLOW",
-            reason="NAVIGATOR recorded a sensitive tool output for cross-call policy POL-009",
+            reason="NAVIGATOR recorded sensitive content for cross-call policy POL-009",
             matched_id="NAVIGATOR-OBSERVED:sensitive-output",
             diagnostics={"engine": "invariant-localpolicy", "event_id": event.event_id},
         )
+
+    def summary(self, session_id: str) -> Dict[str, Any]:
+        # SECRET only: PRIVATE is also derived from another minister merely
+        # escalating a call, which is too weak to tell an agent its session
+        # holds sensitive data. POL-009 itself still uses both labels.
+        events = self.navigator2.ledger.all_events(session_id)
+        return {"holds_sensitive_data": any(
+            e.confidentiality.value == "secret" and e.artifacts_read for e in events)}
 
     def check_with_context(
         self, call: ToolCall, prior_results: Dict[str, MinisterResult]

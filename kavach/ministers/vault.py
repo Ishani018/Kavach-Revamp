@@ -15,15 +15,20 @@ class VaultMinister:
         parsed = prefilters.ParsedCall(tool=call.tool_name, args=call.arguments, raw_text=call.to_wire_text())
         return scan_to_result(prefilters.check_vault(parsed), self.name, redact_match=True)
 
+    _WHERE = {"UserPromptSubmit": "prompt", "PostToolUse": "tool output",
+              "SubagentStop": "sub-agent report", "Stop": "final answer"}
+
     def observe(self, obs: Observation, prior_results: Dict[str, MinisterResult]) -> Optional[MinisterResult]:
-        """Secret values in a submitted prompt or a tool's output. BLOCK on a
-        prompt means "do not send this to the model"; on a tool output it means
-        "credential material is now in the agent's context". Matched values are
-        never returned."""
+        """Secret values in a prompt, a tool's output, a sub-agent's report or
+        the final answer. BLOCK on a prompt means "do not send this to the
+        model"; elsewhere it means "credential material is now in an agent's
+        context". Matched values are never returned."""
+        where = self._WHERE.get(obs.event)
+        if where is None:
+            return None
         hits = prefilters.scan_vault_content(obs.text)
         if not hits:
             return MinisterResult(minister=self.name, verdict="ALLOW", reason="VAULT: no secret value found")
-        where = "prompt" if obs.event == "UserPromptSubmit" else "tool output"
         names = [name for name, _ in hits]
         return MinisterResult(
             minister=self.name,

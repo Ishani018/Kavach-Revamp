@@ -13,9 +13,9 @@ State is in-memory and unbounded (one entry per session_id); no persistence.
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
-from . import channel_taint as ct, scan_to_result
+from . import channel_taint as ct, observed_source, scan_to_result
 from ..schemas import MinisterResult, Observation, ToolCall
 
 
@@ -57,18 +57,22 @@ class ChannelMinister:
 
         UserPromptSubmit: every prompt is trusted user input, so its destination
         values join USER_SUPPLIED (check() alone only reads the first prompt).
-        PostToolUse: the output's destination values become OUTPUT_DERIVED for
-        later calls, and secret material in the output (VAULT BLOCK) taints the
-        session, so a later send to an unverified destination is blocked."""
-        prov = self._provenance.setdefault(obs.session_id, ct.new_provenance_state())
+        Tool output, a sub-agent's report and the final answer are untrusted:
+        their destination values become OUTPUT_DERIVED for later calls,
+        attributed to where they came from, and secret material in them (VAULT
+        BLOCK) taints the session, so a later send to an unverified destination
+        is blocked."""
         if obs.event == "UserPromptSubmit":
+            prov = self._provenance.setdefault(obs.session_id, ct.new_provenance_state())
             prov.user_candidates |= ct._extract_candidate_values(obs.text)
             prov.user_instruction_seen = True
             return None
-
-        tool = obs.tool_name or "unknown_tool"
+        source = observed_source(obs)
+        if source is None:
+            return None
+        prov = self._provenance.setdefault(obs.session_id, ct.new_provenance_state())
         for cand in ct._extract_candidate_values(obs.text):
-            prov.output_candidates.setdefault(cand, (tool, max(prov.turn, 0)))
+            prov.output_candidates.setdefault(cand, (source, max(prov.turn, 0)))
 
         vault = prior_results.get("VAULT")
         if vault is None or vault.verdict != "BLOCK":
@@ -76,12 +80,16 @@ class ChannelMinister:
         taint = self._taint.setdefault(obs.session_id, ct.new_taint_state())
         if not taint.tainted:
             taint.tainted = True
-            taint.source_tool = tool
+            taint.source_tool = source
             taint.source_matched_id = "CHANNEL-TAINT-SOURCE:secret-in-output"
         return MinisterResult(
             minister=self.name,
             verdict="ALLOW",
-            reason="CHANNEL tainted the session: a tool output contained secret material",
+            reason="CHANNEL tainted the session: observed content contained secret material",
             matched_id="CHANNEL-TAINT-SOURCE:secret-in-output",
             diagnostics={"level": "deterministic", "tainted": True},
         )
+
+    def summary(self, session_id: str) -> Dict[str, Any]:
+        taint = self._taint.get(session_id)
+        return {"holds_sensitive_data": bool(taint and taint.tainted)}

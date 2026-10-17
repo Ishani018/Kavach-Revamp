@@ -527,3 +527,105 @@ def test_inconsistent_observation_is_not_trusted(tmp_path: Path, bad: dict[str, 
     with fake_kavach_api(api_result("ALLOW"), bad) as (url, _):
         output = run_hook(post_tool_event(), tmp_path, url)
     assert "output was not inspected" in output["systemMessage"]
+
+
+# ---------- agent attribution and lifecycle hooks ----------
+
+def lifecycle_reply(summary: dict[str, Any] | None = None, event: str = "SessionStart") -> dict[str, Any]:
+    return {
+        "event": event, "verdict": "ALLOW", "reason": "no minister reported", "decided_by": "Speaker",
+        "session_id": "vscode-session-01", "ministers": {},
+        "summary": summary or {"domain_id": "vscode-session-01", "agents": 1, "checks": 0, "blocked": 0,
+                               "escalated": 0, "secret_observations": 0, "holds_sensitive_data": False,
+                               "recent_denials": []},
+    }
+
+
+def test_subagent_tool_calls_carry_agent_attribution(tmp_path: Path) -> None:
+    event = pretool_event()
+    event.update({"agent_id": "agent-7", "agent_type": "Explore"})
+    with fake_kavach_api(api_result("ALLOW")) as (url, received):
+        run_hook(event, tmp_path, url)
+    assert received[0]["agent_id"] == "agent-7" and received[0]["agent_type"] == "Explore"
+    record = json.loads((tmp_path / "kavach-home" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert record["agent_hash"] and "agent-7" not in json.dumps(record)
+
+
+def test_session_start_announces_protection(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(), observed) as (url, _):
+        output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01",
+                           "source": "startup"}, tmp_path, url)
+    assert observed == [{"event": "SessionStart", "session_id": "vscode-session-01"}]
+    ctx = output["hookSpecificOutput"]
+    assert ctx["hookEventName"] == "SessionStart"
+    assert ctx["additionalContext"].startswith("KAVACH ACTIVE")
+
+
+def test_session_start_never_claims_protection_when_kavach_is_down(tmp_path: Path) -> None:
+    output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01"},
+                      tmp_path, "http://127.0.0.1:1")
+    text = output["hookSpecificOutput"]["additionalContext"]
+    assert text.startswith("KAVACH UNAVAILABLE") and "denied" in text
+
+
+def test_resumed_session_gets_prior_denials_back_without_inputs(tmp_path: Path) -> None:
+    summary = {"domain_id": "vscode-session-01", "agents": 2, "checks": 4, "blocked": 1, "escalated": 0,
+               "secret_observations": 1, "holds_sensitive_data": True,
+               "recent_denials": [{"tool": "runInTerminal", "verdict": "BLOCK", "decided_by": "EXECUTOR",
+                                   "rules": ["EXECUTOR-PREFILTER:curl-pipe-shell"]}]}
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(summary)) as (url, _):
+        output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01",
+                           "source": "compact"}, tmp_path, url)
+    text = output["hookSpecificOutput"]["additionalContext"]
+    assert "1 blocked" in text and "do not retry" in text
+    assert "EXECUTOR-PREFILTER:curl-pipe-shell" in text
+    assert "sensitive data" in text
+
+
+def test_subagent_start_injects_shared_state_context(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(event="SubagentStart"), observed) as (url, _):
+        output = run_hook({"hook_event_name": "SubagentStart", "session_id": "vscode-session-01",
+                           "agent_id": "agent-7", "agent_type": "Explore"}, tmp_path, url)
+    assert observed[0] == {"event": "SubagentStart", "session_id": "vscode-session-01",
+                           "agent_id": "agent-7", "agent_type": "Explore"}
+    assert output["hookSpecificOutput"]["hookEventName"] == "SubagentStart"
+    assert "sub-agent" in output["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.parametrize("name", ["SubagentStop", "Stop"])
+def test_secret_in_report_or_answer_sends_the_agent_back_once(tmp_path: Path, name: str) -> None:
+    observed: list[dict[str, Any]] = []
+    event = {"hook_event_name": name, "session_id": "vscode-session-01", "agent_id": "agent-7",
+             "last_assistant_message": SECRET_OUTPUT, "stop_hook_active": False}
+    with fake_kavach_api(api_result("ALLOW"), observation_result("BLOCK", name), observed) as (url, _):
+        first = run_hook(event, tmp_path, url)
+        event["stop_hook_active"] = True
+        second = run_hook(event, tmp_path, url)
+    assert observed[0]["event"] == name and observed[0]["text"] == SECRET_OUTPUT
+    assert first["decision"] == "block" and "Rewrite it without the secret" in first["reason"]
+    assert "decision" not in second and second["continue"] is True    # no loop
+    assert "AKIAIOSFODNN7ABCDEFG" not in json.dumps(first) + json.dumps(second)
+
+
+def test_clean_final_answer_continues(tmp_path: Path) -> None:
+    with fake_kavach_api(api_result("ALLOW")) as (url, _):
+        output = run_hook({"hook_event_name": "Stop", "session_id": "vscode-session-01",
+                           "last_assistant_message": "All tests pass."}, tmp_path, url)
+    assert output == {"continue": True}
+
+
+def test_pre_compact_is_recorded_and_never_blocks(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(event="PreCompact"), observed) as (url, _):
+        output = run_hook({"hook_event_name": "PreCompact", "session_id": "vscode-session-01",
+                           "trigger": "auto"}, tmp_path, url)
+    assert output == {"continue": True}
+    assert observed[0]["event"] == "PreCompact"
+
+
+def test_hook_config_registers_every_supported_event() -> None:
+    config = json.loads((ROOT / ".github" / "hooks" / "kavach.json").read_text(encoding="utf-8"))
+    assert set(config["hooks"]) == {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                                    "SubagentStart", "SubagentStop", "PreCompact", "Stop"}

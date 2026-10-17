@@ -193,6 +193,16 @@ def _session_id(event: dict[str, Any]) -> str | None:
     return value.strip()[:512] if isinstance(value, str) and value.strip() else None
 
 
+def _agent_fields(event: dict[str, Any]) -> dict[str, str]:
+    """agent_id/agent_type, present when the hook fires inside a sub-agent."""
+    fields: dict[str, str] = {}
+    for key in ("agent_id", "agent_type"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            fields[key] = value.strip()[:256]
+    return fields
+
+
 def _session_digest(session_id: str) -> str:
     return _sha(session_id)
 
@@ -350,6 +360,7 @@ def _audit_base(event: dict[str, Any], *, data_home: Path, tool_name: str) -> di
         "hook_event": event.get("hook_event_name"),
         "session_hash": _sha(sid)[:16] if sid else None,
         "tool_use_hash": _tool_use_digest(event),
+        "agent_hash": _sha(event["agent_id"])[:16] if isinstance(event.get("agent_id"), str) and event["agent_id"] else None,
         "tool_name": tool_name[:128],
         "call_fingerprint": _fingerprint(tool_name, tool_input) if isinstance(tool_input, dict) else None,
     }
@@ -402,6 +413,7 @@ def _handle_pre_tool_use(
         "tool_name": tool_name,
         "arguments": tool_input,
         "session_id": sid,
+        **_agent_fields(event),
     }
     prompt = _load_prompt(event, data_home)
     if prompt:
@@ -613,6 +625,7 @@ def _handle_user_prompt_submit(
         verdict, ministers = _validated_observation(observe_call({
             "event": "UserPromptSubmit",
             "session_id": sid,
+            **_agent_fields(event),
             "text": prompt[:MAX_OBSERVED_CHARS],
         }))
     except Exception as exc:
@@ -662,6 +675,7 @@ def _handle_post_tool_use(
         verdict, ministers = _validated_observation(observe_call({
             "event": "PostToolUse",
             "session_id": sid,
+            **_agent_fields(event),
             "tool_name": tool_name,
             "arguments": tool_input if isinstance(tool_input, dict) else {},
             "text": text,
@@ -694,6 +708,146 @@ def _handle_post_tool_use(
     }
 
 
+def _summary_lines(summary: Any) -> list[str]:
+    """Privacy-safe session state for an agent's context: counts and rule IDs."""
+    if not isinstance(summary, dict):
+        return []
+    lines = []
+    try:
+        checks, blocked, escalated = int(summary.get("checks", 0)), int(summary.get("blocked", 0)), int(summary.get("escalated", 0))
+        agents = int(summary.get("agents", 1))
+    except (TypeError, ValueError):
+        return []
+    lines.append(
+        f"Session so far: {checks} tool call(s) checked across {agents} agent(s); "
+        f"{blocked} blocked, {escalated} escalated."
+    )
+    if summary.get("holds_sensitive_data") is True:
+        lines.append(
+            "This session has handled secret or sensitive data. Do not send data to any destination "
+            "the user did not explicitly provide; such sends are blocked."
+        )
+    denials = summary.get("recent_denials")
+    if isinstance(denials, list) and denials:
+        lines.append("Recently denied (do not retry these through another tool or route):")
+        for item in denials[-5:]:
+            if not isinstance(item, dict):
+                continue
+            rules = item.get("rules") if isinstance(item.get("rules"), list) else []
+            rule_text = "; ".join(_safe_inline(r, 80) for r in rules if isinstance(r, str)) or "no rule ID"
+            lines.append(f"- {_safe_inline(item.get('tool'), 80)}: {_safe_inline(item.get('verdict'), 16)} ({rule_text})")
+    return lines
+
+
+def _observe_lifecycle(
+    event: dict[str, Any],
+    data_home: Path,
+    observe_call: Callable[[dict[str, Any]], dict[str, Any]],
+    name: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Report a lifecycle event; returns (error message or None, summary)."""
+    sid = _session_id(event)
+    if not sid:
+        return "Kavach received no session ID.", None
+    payload: dict[str, Any] = {"event": name, "session_id": sid, **_agent_fields(event)}
+    try:
+        reply = observe_call(payload)
+        _validated_observation(reply)
+    except Exception as exc:
+        message = str(exc) if str(exc).startswith("Kavach ") else "Kavach local check failed."
+        _observation_audit(event, data_home=data_home, tool_name="(" + name + ")", text="",
+                           verdict="ERROR", ministers=None)
+        return message, None
+    _observation_audit(event, data_home=data_home, tool_name="(" + name + ")", text="",
+                       verdict="ALLOW", ministers={})
+    summary = reply.get("summary")
+    return None, summary if isinstance(summary, dict) else None
+
+
+def _context_output(event_name: str, text: str) -> dict[str, Any]:
+    return {"hookSpecificOutput": {"hookEventName": event_name, "additionalContext": text[:MAX_REPORT_CHARS]}}
+
+
+def _handle_session_start(event, data_home, observe_call) -> dict[str, Any]:
+    error, summary = _observe_lifecycle(event, data_home, observe_call, "SessionStart")
+    if error:
+        # Informational only, but never claim protection that is not running.
+        return _context_output("SessionStart", (
+            "KAVACH UNAVAILABLE: " + error + " Every tool call in this session will be denied "
+            "until the local Kavach API is running."
+        ))
+    lines = [
+        "KAVACH ACTIVE: every tool call in this session (including sub-agents) is checked by "
+        "VAULT, EXECUTOR, CHANNEL and NAVIGATOR before it runs, and denied if Kavach cannot decide."
+    ]
+    source = event.get("source")
+    if source in ("resume", "compact", "clear") or (summary and summary.get("checks")):
+        lines += _summary_lines(summary)
+    return _context_output("SessionStart", "\n".join(lines))
+
+
+def _handle_subagent_start(event, data_home, observe_call) -> dict[str, Any]:
+    error, summary = _observe_lifecycle(event, data_home, observe_call, "SubagentStart")
+    if error:
+        return _context_output("SubagentStart", "KAVACH UNAVAILABLE: " + error + " Your tool calls will be denied.")
+    lines = [
+        "KAVACH: you are a sub-agent of a guarded session. Your tool calls are checked against the "
+        "same session state as the agent that started you: secrets or sensitive data it handled "
+        "restrict what you may send, and anything you read restricts it in turn."
+    ] + _summary_lines(summary)
+    return _context_output("SubagentStart", "\n".join(lines))
+
+
+def _handle_pre_compact(event, data_home, observe_call) -> dict[str, Any]:
+    # Kavach's state lives in the local service, not the transcript, so
+    # compaction loses nothing there. SessionStart(source=compact) re-injects
+    # the summary into the agent's context afterwards.
+    _observe_lifecycle(event, data_home, observe_call, "PreCompact")
+    return {"continue": True}
+
+
+def _handle_stop(event, data_home, observe_call, name: str) -> dict[str, Any]:
+    """SubagentStop: the sub-agent's report, which flows back to its parent.
+    Stop: the final answer shown to the user."""
+    sid = _session_id(event)
+    text = _observed_text(event.get("last_assistant_message"))
+    label = "sub-agent report" if name == "SubagentStop" else "final answer"
+    if not sid:
+        return {"continue": True}
+    payload = {"event": name, "session_id": sid, "text": text, **_agent_fields(event)}
+    if name == "SubagentStop" and "agent_id" not in payload:
+        payload["agent_id"] = "unknown-subagent"
+    try:
+        verdict, ministers = _validated_observation(observe_call(payload))
+    except Exception as exc:
+        message = str(exc) if str(exc).startswith("Kavach ") else "Kavach local check failed."
+        _observation_audit(event, data_home=data_home, tool_name="(" + name + ")", text=text,
+                           verdict="ERROR", ministers=None)
+        return {"continue": True, "systemMessage": message + " The " + label + " was not inspected."}
+    _observation_audit(event, data_home=data_home, tool_name="(" + name + ")", text=text,
+                       verdict=verdict, ministers=ministers)
+    if verdict == "ALLOW":
+        return {"continue": True}
+    title = "KAVACH SUB-AGENT REPORT REVIEW" if name == "SubagentStop" else "KAVACH FINAL ANSWER REVIEW"
+    report = _observation_report(title, verdict, ministers)
+    if verdict == "BLOCK" and event.get("stop_hook_active") is not True:
+        # Send the agent back once to rewrite without the secret. If a stop hook
+        # already continued it, do not loop: warn instead.
+        return {
+            "decision": "block",
+            "reason": (
+                "Kavach: your " + label + " contains secret material. Rewrite it without the secret "
+                "value; refer to the secret only by name or location."
+            ),
+            "systemMessage": report,
+        }
+    caution = (
+        "Kavach: the " + label + " still contains secret material after a rewrite request."
+        if verdict == "BLOCK" else "Kavach could not fully inspect the " + label + "."
+    )
+    return {"continue": True, "systemMessage": caution + "\n" + report}
+
+
 def process_event(
     event: dict[str, Any],
     *,
@@ -710,7 +864,16 @@ def process_event(
         return _handle_pre_tool_use(event, home, api_call or _post_check)
     if event_name == "PostToolUse":
         return _handle_post_tool_use(event, home, observe_call or _post_observe)
-    # This script is registered only for the three events above. If VS Code
+    observe = observe_call or _post_observe
+    if event_name == "SessionStart":
+        return _handle_session_start(event, home, observe)
+    if event_name == "SubagentStart":
+        return _handle_subagent_start(event, home, observe)
+    if event_name in ("SubagentStop", "Stop"):
+        return _handle_stop(event, home, observe, event_name)
+    if event_name == "PreCompact":
+        return _handle_pre_compact(event, home, observe)
+    # This script is registered only for the events above. If VS Code
     # invokes it with an unknown/malformed event name, never silently permit a
     # potentially pre-execution event.
     return _deny("Kavach blocked this operation because the hook event type was missing or unsupported.")
