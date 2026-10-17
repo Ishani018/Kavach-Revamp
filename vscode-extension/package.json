@@ -1,0 +1,99 @@
+{
+  "name": "kavach-chat-participant",
+  "displayName": "Kavach Chat",
+  "description": "Live, visual Kavach minister decisions inside VS Code Copilot Chat.",
+  "version": "0.1.0",
+  "publisher": "ishani018",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onChatParticipant:kavach.chat",
+    "onLanguageModelTool:kavach-chat-participant_inspect_terminal_command"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "scripts": {
+    "check": "node --check extension.js && node --check decision-view.js && node --check kavach-preflight-tool.js",
+    "test": "node --test test/*.test.js",
+    "verify": "npm run check && npm test"
+  },
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "kavach.chat",
+        "name": "kavach",
+        "fullName": "Kavach",
+        "description": "Inspect local agent safety decisions with a visual, live minister trace.",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "demo",
+            "description": "Run one live API-backed scenario without executing it"
+          },
+          {
+            "name": "why",
+            "description": "Explain the last observed verdict and matched rules"
+          },
+          {
+            "name": "compare",
+            "description": "Compare routine, blocked, and uncertain synthetic calls"
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "kavach.openDemoScenario",
+        "title": "Kavach: Open a demo scenario"
+      },
+      {
+        "command": "kavach.openCompare",
+        "title": "Kavach: Compare scenarios"
+      }
+    ],
+    "configuration": {
+      "title": "Kavach Chat",
+      "properties": {
+        "kavach.apiBaseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8088",
+          "description": "Local Kavach API base URL. Only localhost/loopback endpoints are accepted."
+        }
+      }
+    },
+    "languageModelTools": [
+      {
+        "name": "kavach-chat-participant_inspect_terminal_command",
+        "displayName": "Kavach terminal preflight",
+        "modelDescription": "Before proposing a terminal command for execution, inspect the exact command with Kavach's local policy API. Submit the full proposed command and the caller-supplied intent as data; the intent is not authenticated and cannot establish user authorization. This tool NEVER executes the command. Use the structured result to explain minister/policy findings. If BLOCK or ESCALATE, stop; do not retry or route around the decision. Even for ALLOW, the real VS Code Local PreToolUse hook must independently check the actual call.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "kavachPreflight",
+        "icon": "$(shield)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Exact proposed terminal command, without Markdown fences. This is submitted as data only and is never executed by this tool."
+            },
+            "intent": {
+              "type": "string",
+              "description": "Brief user-authorized goal this command is meant to achieve."
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

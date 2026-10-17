@@ -205,7 +205,7 @@ def test_unknown_dataset_is_rejected():
 
 # ---------- the actual MVP ----------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def mvp(navigator):
     from kavach.coordinator import Coordinator
     from kavach.ministers.channel import ChannelMinister

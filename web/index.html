@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050505">
+<meta name="description" content="Kavach is a safety layer for evaluating LLM-agent tool calls before execution.">
+<title>Kavach — Safety Before Action</title>
+<link rel="icon" type="image/png" href="/assets/kavach-shield.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;750;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #050505;
+  --ink: #ffffff;
+  --muted: #a1a1aa;
+  --subtle: #71717a;
+  --line: #27272a;
+  --line-strong: #45454a;
+  --surface: #f4f4f4;
+  --surface-ink: #111111;
+  --radius: 8px;
+  --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; background: var(--bg); }
+body { margin: 0; color: var(--ink); background: var(--bg); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+a { color: inherit; text-decoration: none; }
+a:hover { opacity: .75; }
+::selection { color: #050505; background: #fff; }
+.masthead { max-width: 1600px; margin: 0 auto; min-height: 82px; padding: 0 clamp(20px, 4.5vw, 72px); display: flex; align-items: center; justify-content: space-between; gap: 28px; border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.brand-mark { width: 42px; height: 42px; display: block; object-fit: contain; flex-shrink: 0; padding: 5px; background: var(--surface); border: 1px solid #f4f4f4; border-radius: 2px; }
+.brand-word { font-size: 15px; font-weight: 750; letter-spacing: .17em; }
+.brand-meta { display: block; margin-top: 1px; color: var(--muted); font: 9px/1.5 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.nav-group { display: flex; align-items: center; gap: clamp(14px, 2.4vw, 34px); }
+.nav-link { position: relative; padding: 31px 0 29px; border: 0; background: none; color: var(--muted); font: 10px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.nav-link::after { position: absolute; bottom: 0; left: 0; right: 100%; height: 2px; background: var(--ink); content: ""; transition: right .2s ease; }
+.nav-link:hover, .nav-link.active { color: var(--ink); }
+.nav-link.active::after { right: 0; }
+.status-cluster { display: flex; align-items: center; justify-content: flex-end; gap: 14px; flex-shrink: 0; }
+.status-pill { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font: 9px/1.4 var(--mono); letter-spacing: .035em; white-space: nowrap; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: #71717a; display: inline-block; }
+.dot.ok { background: #fff; box-shadow: 0 0 0 3px #ffffff15; }
+.dot.warn { background: #a1a1aa; }
+main { max-width: 1600px; margin: 0 auto; padding: 0 clamp(20px, 4.5vw, 72px) 64px; }
+.page-context { padding: 22px 0 0; display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+.eyebrow, .mono-label { font: 10px/1.5 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.page-title { color: var(--ink); margin: 0; font: 10px/1.5 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.page-subtitle { color: var(--subtle); margin: 0; font-size: 12px; text-align: right; }
+.page { display: none; padding-top: 42px; animation: enter .38s ease both; }
+.page.active { display: block; }
+@keyframes enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+.intro-grid { display: grid; grid-template-columns: minmax(0, 1.38fr) minmax(280px, .62fr); gap: clamp(28px, 6vw, 98px); align-items: stretch; padding: 14px 0 56px; }
+.hero-copy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; }
+.hero-kicker { display: flex; align-items: center; gap: 10px; margin-bottom: 25px; color: var(--muted); font: 10px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.kicker-mark { width: 24px; height: 1px; background: var(--ink); }
+.hero-title { max-width: 900px; margin: 0; font-size: clamp(52px, 7.5vw, 112px); line-height: .93; font-weight: 500; letter-spacing: -.085em; }
+.hero-title .outline { color: transparent; -webkit-text-stroke: 1px #a1a1aa; }
+.hero-description { max-width: 470px; margin: 27px 0 0; color: var(--muted); font-size: 15px; line-height: 1.75; }
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 31px; }
+.btn { min-height: 43px; border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 22px; font-size: 11px; font-weight: 600; transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { border-color: var(--surface); background: var(--surface); color: var(--surface-ink); }
+.btn-primary:hover { background: #fff; }
+.btn-secondary { background: transparent; color: var(--ink); }
+.btn-secondary:hover, .btn-quiet:hover { border-color: var(--ink); background: #ffffff09; }
+.btn-quiet { background: transparent; color: var(--muted); }
+.btn-small { min-height: 33px; padding: 0 10px; gap: 8px; font-size: 10px; }
+.btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+.featured-card { position: relative; min-height: 390px; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; background: var(--surface); color: var(--surface-ink); border-radius: 2px; padding: 22px; isolation: isolate; }
+.featured-card::before, .featured-card::after { content: ""; position: absolute; z-index: -1; border: 1px solid #11111118; border-radius: 50%; aspect-ratio: 1; width: 82%; right: -22%; top: 3%; }
+.featured-card::after { width: 61%; right: -11%; top: 15%; }
+.featured-top { display: flex; justify-content: space-between; gap: 10px; font: 9px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.signal-art { width: 100%; flex: 1; min-height: 150px; display: grid; place-items: center; }
+.signal-art svg { width: min(100%, 240px); height: auto; overflow: visible; }
+.featured-bottom { border-top: 1px solid #11111129; padding-top: 15px; display: flex; justify-content: space-between; align-items: flex-end; gap: 15px; }
+.featured-number { font-size: clamp(48px, 6vw, 80px); line-height: .8; font-weight: 500; letter-spacing: -.09em; }
+.featured-caption { max-width: 115px; font: 9px/1.6 var(--mono); letter-spacing: .03em; text-transform: uppercase; text-align: right; }
+.index-strip { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 100px; }
+.index-cell { padding: 17px 18px 18px 0; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--line); }
+.index-cell:not(:first-child) { padding-left: 20px; }
+.index-cell:last-child { border-right: 0; }
+.index-number { font-size: 29px; font-weight: 450; letter-spacing: -.06em; line-height: 1; }
+.index-label { font: 9px/1.4 var(--mono); letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+.section-intro { display: grid; grid-template-columns: minmax(220px, .62fr) minmax(0, 1.38fr); gap: 50px; align-items: start; margin-bottom: 31px; }
+.section-index { color: var(--muted); font: 10px/1.5 var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.section-heading { max-width: 740px; margin: -8px 0 0; font-size: clamp(33px, 5vw, 64px); line-height: 1.02; font-weight: 450; letter-spacing: -.065em; }
+.section-heading .muted { color: var(--subtle); }
+.section-description { max-width: 460px; margin: 16px 0 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.minister-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.minister-card { min-height: 190px; position: relative; padding: 22px 23px 25px; display: flex; flex-direction: column; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transition: background .2s ease; }
+.minister-card:hover { background: #ffffff06; }
+.minister-card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font: 9px/1.5 var(--mono); letter-spacing: .08em; }
+.minister-symbol { color: var(--ink); font-size: 17px; }
+.minister-name { margin: 30px 0 8px; font-size: clamp(18px, 2vw, 25px); font-weight: 550; letter-spacing: -.04em; }
+.minister-description { max-width: 400px; color: var(--muted); margin: 0; font-size: 12px; line-height: 1.7; }
+.decision-section { margin-top: 100px; display: grid; grid-template-columns: .8fr 1.2fr; gap: 35px; border: 1px solid var(--line); padding: clamp(22px, 4vw, 46px); }
+.decision-heading { margin: 15px 0 13px; max-width: 420px; font-size: clamp(28px, 4vw, 48px); line-height: 1; font-weight: 450; letter-spacing: -.06em; }
+.decision-copy { color: var(--muted); max-width: 360px; font-size: 12px; line-height: 1.75; }
+.decision-list { display: grid; grid-template-columns: repeat(3, 1fr); border-left: 1px solid #d4d4d8; }
+.decision-item { background: var(--surface); color: var(--surface-ink); padding: 19px 17px; border-right: 1px solid #d4d4d8; display: flex; flex-direction: column; gap: 16px; min-height: 145px; }
+.decision-symbol { font: 22px/1 var(--mono); }
+.decision-item strong { font-size: 12px; letter-spacing: .05em; }
+.decision-item p { color: #52525b; margin: 4px 0 0; font-size: 11px; line-height: 1.6; }
+.disclaimer { margin: 22px 0 0; color: var(--subtle); font: 9px/1.7 var(--mono); letter-spacing: .025em; }
+.page-heading-block { padding: 7px 0 38px; border-bottom: 1px solid var(--line); margin-bottom: 31px; }
+.page-heading { margin: 15px 0 13px; max-width: 1000px; font-size: clamp(44px, 7vw, 88px); line-height: .95; letter-spacing: -.08em; font-weight: 500; }
+.page-heading .outline { color: transparent; -webkit-text-stroke: 1px #a1a1aa; }
+.page-heading-block p { max-width: 590px; color: var(--muted); font-size: 13px; line-height: 1.7; margin: 0; }
+.content-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(330px, .95fr); gap: 25px; align-items: start; }
+.panel { min-width: 0; border: 1px solid var(--line); border-radius: 2px; padding: clamp(19px, 3vw, 31px); }
+.panel-heading { display: flex; justify-content: space-between; gap: 17px; align-items: flex-start; margin-bottom: 24px; }
+.panel h3 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -.035em; }
+.help { color: var(--muted); font-size: 11px; line-height: 1.65; margin: 7px 0 0; }
+.counter { color: var(--muted); font: 9px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.field { display: grid; gap: 8px; margin-bottom: 17px; }
+.field label { color: #d4d4d8; font: 10px/1.5 var(--mono); text-transform: uppercase; letter-spacing: .07em; }
+.field label span { color: var(--subtle) !important; }
+.input, select, textarea { display: block; width: 100%; min-width: 0; color: var(--ink); background: #0b0b0c; border: 1px solid var(--line-strong); border-radius: 2px; padding: 12px 13px; outline: none; transition: border-color .15s ease, background .15s ease; }
+.input::placeholder, textarea::placeholder { color: #71717a; }
+.input:focus, select:focus, textarea:focus { border-color: #d4d4d8; background: #101012; box-shadow: none; }
+select { color-scheme: dark; }
+textarea { min-height: 150px; resize: vertical; font: 12px/1.7 var(--mono); }
+.two-fields { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; }
+.form-actions { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+.notice { display: none; margin: 14px 0 0; padding: 11px 12px; border: 1px solid var(--line-strong); color: var(--muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.notice.show { display: block; }
+.notice.error { color: #fff; border-color: #71717a; background: #27272a; }
+.notice.success { color: #fff; border-color: #a1a1aa; background: #18181b; }
+.tiny-note { margin: 15px 0 0; color: var(--subtle); font: 9px/1.7 var(--mono); }
+.example-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
+.result-panel { background: var(--surface); border-color: var(--surface); color: var(--surface-ink); }
+.result-panel .help, .result-panel .counter, .result-panel .label-small { color: #52525b; }
+.verdict-empty { min-height: 330px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 10px 0; }
+.empty-symbol { width: 44px; height: 44px; border: 1px solid #d4d4d8; display: grid; place-items: center; font-size: 23px; margin-bottom: 23px; }
+.verdict-empty strong { font-weight: 500; font-size: 21px; letter-spacing: -.04em; }
+.verdict-empty p { max-width: 240px; margin: 8px 0 0; color: #52525b; font-size: 12px; line-height: 1.7; }
+.verdict-result { display: none; }
+.verdict-result.show { display: block; }
+.result-head { border-bottom: 1px solid #d4d4d8; padding-bottom: 19px; margin-bottom: 20px; }
+.result-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.label-small { font: 9px/1.5 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.verdict { padding: 6px 8px; border: 1px solid #a1a1aa; font: 10px/1 var(--mono); letter-spacing: .08em; }
+.verdict.ALLOW { background: #fff; color: #111; border-color: #111; }
+.verdict.BLOCK { background: #111; color: #fff; border-color: #111; }
+.verdict.ESCALATE { background: #e4e4e7; color: #111; border-color: #a1a1aa; }
+.result-reason { margin: 0; color: #27272a; font-size: 14px; line-height: 1.65; }
+.result-panel .tiny-note { color: #71717a; }
+.ministers { display: grid; gap: 0; border-top: 1px solid #d4d4d8; }
+.minister-result { padding: 15px 0; border-bottom: 1px solid #d4d4d8; }
+.minister-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.minister-title strong { font: 10px/1.5 var(--mono); letter-spacing: .06em; }
+.minister-reason { color: #52525b; margin: 0; font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+.mini-verdict { font: 9px/1.4 var(--mono); letter-spacing: .06em; }
+.mini-verdict.ALLOW { color: #27272a; }.mini-verdict.BLOCK { color: #000; text-decoration: underline; }.mini-verdict.ESCALATE { color: #52525b; }
+.rule-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto; gap: 9px; margin-bottom: 18px; }
+.rule-list { display: grid; border-top: 1px solid var(--line); }
+.rule-card { border-bottom: 1px solid var(--line); padding: 19px 0 21px; }
+.rule-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 13px; flex-wrap: wrap; }
+.rule-id { color: var(--ink); font: 11px/1.6 var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+.rule-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.tag { border: 1px solid var(--line-strong); padding: 4px 6px; color: var(--muted); font: 8px/1.1 var(--mono); text-transform: uppercase; letter-spacing: .045em; border-radius: 1px; }
+.tag.review { color: var(--ink); border-color: #737373; }
+.rule-desc { color: #d4d4d8; font-size: 12px; line-height: 1.7; margin: 11px 0 0; overflow-wrap: anywhere; }
+.rule-context { color: var(--subtle); font: 9px/1.7 var(--mono); margin-top: 8px; overflow-wrap: anywhere; }
+.rules-empty { padding: 38px 12px; border: 1px dashed var(--line-strong); text-align: center; color: var(--muted); font-size: 11px; }
+.catalog-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font: 9px/1.5 var(--mono); margin-top: 18px; }
+.login-panel { max-width: 480px; margin: 38px auto; }
+.login-form { display: grid; gap: 10px; margin-top: 18px; }
+.setup-steps { color: var(--muted); padding-left: 20px; font-size: 11px; line-height: 1.8; }
+.setup-steps li { margin: 6px 0; }
+.footer { padding-top: 17px; margin-top: 65px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; color: var(--subtle); font: 9px/1.6 var(--mono); letter-spacing: .035em; text-transform: uppercase; }
+@media (max-width: 1000px) {
+  .masthead { flex-wrap: wrap; gap: 0; padding-top: 16px; }
+  .brand { margin-right: auto; }
+  .nav-group { order: 3; width: 100%; justify-content: flex-start; gap: 24px; }
+  .nav-link { padding: 22px 0 18px; }
+  .status-cluster { margin-left: 18px; }
+  .intro-grid { grid-template-columns: minmax(0,1fr) minmax(245px,.72fr); gap: 25px; }
+  .content-grid { grid-template-columns: 1fr; }
+  .result-panel .verdict-empty { min-height: 210px; }
+}
+@media (max-width: 680px) {
+  .masthead { padding: 15px 18px 0; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-word { font-size: 13px; }
+  .brand-meta { font-size: 8px; }
+  .status-cluster { gap: 8px; margin-left: 10px; }
+  .status-pill { font-size: 8px; }
+  .nav-group { gap: 19px; overflow-x: auto; }
+  .nav-link { font-size: 9px; }
+  main { padding: 0 18px 40px; }
+  .page-context { align-items: flex-start; flex-direction: column; gap: 3px; padding-top: 17px; }
+  .page-subtitle { text-align: left; }
+  .page { padding-top: 22px; }
+  .intro-grid { grid-template-columns: 1fr; padding: 14px 0 35px; }
+  .hero-kicker { margin-bottom: 20px; }
+  .hero-title { font-size: clamp(49px, 14vw, 76px); }
+  .hero-description { font-size: 13px; margin-top: 20px; }
+  .featured-card { min-height: 300px; }
+  .signal-art svg { width: min(100%, 185px); }
+  .index-strip { grid-template-columns: repeat(2,1fr); margin-bottom: 65px; }
+  .index-cell { padding: 13px 8px 15px 0; }
+  .index-cell:not(:first-child) { padding-left: 13px; }
+  .index-cell:nth-child(2) { border-right: 0; }
+  .index-cell:nth-child(3), .index-cell:nth-child(4) { border-top: 1px solid var(--line); }
+  .index-number { font-size: 25px; }
+  .section-intro { grid-template-columns: 1fr; gap: 19px; margin-bottom: 24px; }
+  .section-heading { margin: 0; font-size: 41px; }
+  .minister-grid { grid-template-columns: 1fr; }
+  .minister-card { min-height: 165px; padding: 19px; }
+  .minister-name { margin-top: 24px; }
+  .decision-section { grid-template-columns: 1fr; padding: 21px; margin-top: 65px; gap: 18px; }
+  .decision-list { grid-template-columns: 1fr; border-top: 1px solid #d4d4d8; border-left: 0; }
+  .decision-item { min-height: 0; padding: 14px 16px; border-bottom: 1px solid #d4d4d8; border-right: 0; gap: 9px; }
+  .decision-item:last-child { border-bottom: 0; }
+  .page-heading { font-size: clamp(46px, 13vw, 70px); }
+  .two-fields { grid-template-columns: 1fr; gap: 0; }
+  .rule-toolbar { grid-template-columns: 1fr; }
+  .panel { padding: 18px; }
+  .catalog-pagination { align-items: flex-start; flex-direction: column; }
+  .footer { margin-top: 45px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+</style>
+</head>
+<body>
+<header class="masthead">
+  <a class="brand" href="/" aria-label="Kavach home">
+    <img class="brand-mark" src="/assets/kavach-shield.png" alt="Kavach shield">
+    <span><span class="brand-word">KAVACH</span><span class="brand-meta">Agent safety / 01</span></span>
+  </a>
+  <nav class="nav-group" aria-label="Main navigation">
+    <button class="nav-link active" data-view="overview">01 Overview</button>
+    <button class="nav-link" data-view="check">02 Evaluate</button>
+    <button class="nav-link" data-view="catalog">03 Rule archive</button>
+  </nav>
+  <div class="status-cluster" aria-label="Service health">
+    <span class="status-pill"><span class="dot" id="apiDot"></span><span id="apiStatus">API checking</span></span>
+    <span class="status-pill"><span class="dot" id="dbDot"></span><span id="dbStatus">Database checking</span></span>
+  </div>
+</header>
+<main>
+  <div class="page-context">
+    <h2 class="page-title" id="pageTitle">01 / System overview</h2>
+    <p class="page-subtitle" id="pageSubtitle">A guardrail layer for proposed agent actions.</p>
+  </div>
+
+  <section class="page active" id="view-overview">
+    <div class="intro-grid">
+      <div class="hero-copy">
+        <div class="hero-kicker"><span class="kicker-mark"></span>Inspection before execution · Research build</div>
+        <h1 class="hero-title">SAFETY AT<br>THE EDGE OF<br><span class="outline">ACTION.</span></h1>
+        <p class="hero-description">An independent safety layer for AI agents. Kavach reviews proposed tool calls through four specialist ministers, before a real tool boundary decides what can run.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" data-view="check">Inspect a tool call <span aria-hidden="true">↗</span></button>
+          <button class="btn btn-secondary" data-view="catalog">Explore the archive <span aria-hidden="true">↓</span></button>
+        </div>
+      </div>
+      <aside class="featured-card" aria-label="Kavach safety gate summary">
+        <div class="featured-top"><span>Kavach / Pre-flight</span><span>01 — 04</span></div>
+        <div class="signal-art">
+          <svg viewBox="0 0 240 240" role="img" aria-label="Abstract concentric safety signal">
+            <circle cx="120" cy="120" r="95" fill="none" stroke="#111111" stroke-opacity=".17" stroke-width="1"/>
+            <circle cx="120" cy="120" r="73" fill="none" stroke="#111111" stroke-opacity=".3" stroke-width="1"/>
+            <circle cx="120" cy="120" r="51" fill="none" stroke="#111111" stroke-opacity=".45" stroke-width="1"/>
+            <path d="M120 12V72M120 168V228M12 120H72M168 120H228" stroke="#111111" stroke-width="1"/>
+            <path d="M91 122l20 20 40-46" fill="none" stroke="#111111" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/>
+            <circle cx="120" cy="120" r="7" fill="#111111"/>
+            <path d="M120 0V21M219 120H240M120 219V240M0 120H21" stroke="#111111" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="featured-bottom"><div class="featured-number">K/01</div><div class="featured-caption">A considered pause<br>before every action</div></div>
+      </aside>
+    </div>
+
+    <div class="index-strip" aria-label="System facts">
+      <div class="index-cell"><span class="index-label">Architecture</span><span class="index-number">04</span><span class="index-label">Specialist ministers</span></div>
+      <div class="index-cell"><span class="index-label">Decision set</span><span class="index-number">03</span><span class="index-label">Allow / block / escalate</span></div>
+      <div class="index-cell"><span class="index-label">Rule archive</span><span class="index-number" id="catalogCount">—</span><span class="index-label">Supabase records</span></div>
+      <div class="index-cell"><span class="index-label">Operating principle</span><span class="index-number">01</span><span class="index-label">Check before execution</span></div>
+    </div>
+
+    <section aria-labelledby="minister-section-title">
+      <div class="section-intro">
+        <div class="section-index">02 / The system</div>
+        <div>
+          <h2 class="section-heading" id="minister-section-title">Four specialists.<br><span class="muted">One considered decision.</span></h2>
+          <p class="section-description">Each minister owns a defined risk surface. Their findings are combined into a single, legible recommendation — not hidden behind a score alone.</p>
+        </div>
+      </div>
+      <div class="minister-grid">
+        <article class="minister-card"><div class="minister-card-top"><span>01 / Secrets</span><span class="minister-symbol">⌘</span></div><h3 class="minister-name">VAULT</h3><p class="minister-description">Finds credentials and sensitive values in proposed arguments before they are passed to tools.</p></article>
+        <article class="minister-card"><div class="minister-card-top"><span>02 / Execution</span><span class="minister-symbol">↳</span></div><h3 class="minister-name">EXECUTOR</h3><p class="minister-description">Checks risky shell and code-execution patterns where a seemingly ordinary call could cause harm.</p></article>
+        <article class="minister-card"><div class="minister-card-top"><span>03 / Data movement</span><span class="minister-symbol">⇢</span></div><h3 class="minister-name">CHANNEL</h3><p class="minister-description">Looks for suspicious relationships between sensitive reads and external destinations across a session.</p></article>
+        <article class="minister-card"><div class="minister-card-top"><span>04 / Policy context</span><span class="minister-symbol">◎</span></div><h3 class="minister-name">NAVIGATOR</h3><p class="minister-description">Uses Invariant Guardrails policies to reason over the current call and the evidence available to it.</p></article>
+      </div>
+    </section>
+
+    <section class="decision-section" aria-labelledby="decision-heading">
+      <div>
+        <div class="section-index">03 / Decision language</div>
+        <h2 class="decision-heading" id="decision-heading">Make risk clear. Keep the boundary real.</h2>
+        <p class="decision-copy">Kavach provides a recommendation, not an execution permission. The real tool boundary must enforce the final result.</p>
+      </div>
+      <div class="decision-list">
+        <div class="decision-item"><span class="decision-symbol">↗</span><div><strong>ALLOW</strong><p>No blocking condition was raised by the available checks.</p></div></div>
+        <div class="decision-item"><span class="decision-symbol">×</span><div><strong>BLOCK</strong><p>A minister found a disallowed or dangerous condition.</p></div></div>
+        <div class="decision-item"><span class="decision-symbol">!</span><div><strong>ESCALATE</strong><p>Ask a person to review incomplete or higher-risk evidence.</p></div></div>
+      </div>
+    </section>
+    <p class="disclaimer">RESEARCH MVP / NO TOOL EXECUTION / REQUIRES ENFORCEMENT AT THE REAL EXECUTOR</p>
+  </section>
+
+  <section class="page" id="view-check">
+    <div class="page-heading-block">
+      <div class="section-index">02 / Call inspection</div>
+      <h1 class="page-heading">CHECK BEFORE<br>IT <span class="outline">ACTS.</span></h1>
+      <p>Describe the proposed call and its context. Kavach returns a combined verdict and the reasoning from each minister. It never executes the tool.</p>
+    </div>
+    <div class="content-grid">
+      <div class="panel">
+        <div class="panel-heading"><div><h3>Evaluate a proposed tool call</h3><p class="help">Provide the call details for inspection.</p></div><span class="counter">JSON / 01</span></div>
+        <form id="checkForm">
+          <div class="two-fields">
+            <div class="field"><label for="toolName">Tool name</label><input class="input" id="toolName" required value="bash" autocomplete="off" placeholder="e.g. bash, email, read_file"></div>
+            <div class="field"><label for="sessionId">Session ID</label><input class="input" id="sessionId" required value="demo-session" autocomplete="off"></div>
+          </div>
+          <div class="field"><label for="arguments">Arguments / valid JSON object</label><textarea id="arguments" spellcheck="false" required>{ "command": "echo hello" }</textarea></div>
+          <div class="field"><label for="userInstruction">Trusted task instruction <span>(optional)</span></label><input class="input" id="userInstruction" placeholder="What is the agent permitted to do?"></div>
+          <div class="two-fields">
+            <div class="field"><label for="accountEmail">Account email <span>(optional)</span></label><input class="input" id="accountEmail" placeholder="user@example.com"></div>
+            <div class="field"><label for="toolOutput">Prior tool output <span>(optional)</span></label><input class="input" id="toolOutput" placeholder="Relevant prior output"></div>
+          </div>
+          <div class="form-actions"><button class="btn btn-primary" id="checkButton" type="submit">Run safety check <span aria-hidden="true">↗</span></button><button class="btn btn-quiet" id="resetButton" type="button">Reset form</button></div>
+          <div class="notice" id="checkNotice" role="status" aria-live="polite"></div>
+        </form>
+        <div class="example-row"><button class="btn btn-secondary btn-small" type="button" data-example="benign">Example / benign</button><button class="btn btn-secondary btn-small" type="button" data-example="sensitive">Example / sensitive file</button><button class="btn btn-secondary btn-small" type="button" data-example="send">Example / external send</button></div>
+        <p class="tiny-note">Avoid entering real API keys, passwords, personal information, or production command output.</p>
+      </div>
+      <div class="panel result-panel">
+        <div class="panel-heading"><div><h3>Safety decision</h3><p class="help">Combined verdict and minister reasoning.</p></div><span class="counter">OUTPUT / 02</span></div>
+        <div class="verdict-empty" id="emptyResult"><div class="empty-symbol">⌁</div><strong>Awaiting inspection.</strong><p>Submit a tool call to reveal the combined verdict and specialist breakdown.</p></div>
+        <div class="verdict-result" id="resultView">
+          <div class="result-head"><div class="result-top"><span class="label-small">Overall verdict</span><span id="overallVerdict" class="verdict ESCALATE">ESCALATE</span></div><p class="result-reason" id="overallReason"></p><p class="tiny-note" id="decisionMeta"></p></div>
+          <div class="label-small" style="margin:0 0 10px">Minister breakdown</div><div class="ministers" id="ministerResults"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="view-catalog">
+    <div class="page-heading-block">
+      <div class="section-index">03 / Rule archive</div>
+      <h1 class="page-heading">THE RULE<br><span class="outline">ARCHIVE.</span></h1>
+      <p>Browse source provenance and review status for minister definitions stored in Supabase. The catalogue is private and read-only.</p>
+    </div>
+    <div class="panel">
+      <div class="panel-heading"><div><h3>Minister definitions</h3><p class="help">Search records by intent, mechanism, category, or ID.</p></div><button class="btn btn-quiet btn-small" id="catalogReload" type="button">Refresh archive ↻</button></div>
+      <div id="catalogLogin">
+        <div class="login-panel">
+          <div class="section-index">Restricted access / 01</div><h3 id="catalogGateTitle" style="margin-top:12px">Private catalogue</h3><p class="help" id="catalogGateText">Sign in using the dashboard password configured by the project owner.</p>
+          <form class="login-form" id="loginForm"><input type="password" class="input" id="loginPassword" autocomplete="current-password" placeholder="Dashboard password" required><button class="btn btn-primary" type="submit">Sign in to browse rules <span aria-hidden="true">↗</span></button><div class="notice" id="loginNotice" role="status" aria-live="polite"></div></form>
+          <div id="setupHelp" style="display:none;margin-top:18px"><p class="help">The private catalogue is locked until server-side login and database configuration are complete.</p><ol class="setup-steps"><li><code>KAVACH_DASHBOARD_PASSWORD</code> — a unique password</li><li><code>KAVACH_SESSION_SECRET</code> — a random cookie-signing secret</li><li><code>SUPABASE_URL</code> and <code>SUPABASE_SECRET_KEY</code> — server environment only</li></ol><p class="tiny-note">Never put the Supabase secret key in browser code or a public environment variable.</p></div>
+        </div>
+      </div>
+      <div id="catalogArea" style="display:none">
+        <div class="rule-toolbar"><input class="input" id="ruleSearch" placeholder="Search intent, mechanism, category or ID…" aria-label="Search rule catalogue"><select id="ministerFilter" aria-label="Filter by minister"><option value="">All ministers</option><option>VAULT</option><option>EXECUTOR</option><option>CHANNEL</option><option>NAVIGATOR</option></select><button class="btn btn-primary" id="searchRules" type="button">Search ↗</button></div>
+        <div id="catalogMeta" class="help" style="margin-bottom:13px"></div><div class="rule-list" id="ruleList"><div class="rules-empty">Sign in to load the catalogue.</div></div>
+        <div class="catalog-pagination"><span id="pageStatus">Page 1</span><div style="display:flex;gap:8px"><button class="btn btn-quiet btn-small" id="prevPage" type="button">← Previous</button><button class="btn btn-quiet btn-small" id="nextPage" type="button">Next →</button></div></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:18px"><button class="btn btn-quiet btn-small" id="logoutButton" type="button">Sign out</button></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer"><span>Kavach / Agent safety console</span><span>Research edition · Decisions are advisory until enforced at execution</span></footer>
+</main>
+<script>
+(function(){
+  const $ = function(id){return document.getElementById(id);};
+  let isAuthenticated = false;
+  let loginConfigured = false;
+  let currentPage = 1;
+  let catalogTotal = null;
+  const pageTitles = {
+    overview:["01 / System overview","A guardrail layer for proposed agent actions."],
+    check:["02 / Call inspection","Submit a proposed call. Kavach evaluates; it never executes."],
+    catalog:["03 / Rule archive","Source-backed definitions, review status, and provenance."]
+  };
+  function escapeHtml(value){
+    return String(value == null ? "" : value).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});
+  }
+  function showView(view){
+    document.querySelectorAll(".page").forEach(function(el){el.classList.toggle("active",el.id==="view-"+view);});
+    document.querySelectorAll(".nav-link[data-view]").forEach(function(el){el.classList.toggle("active",el.dataset.view===view);});
+    $("pageTitle").textContent=pageTitles[view][0];
+    $("pageSubtitle").textContent=pageTitles[view][1];
+    if(view==="catalog"){syncCatalogGate();if(isAuthenticated){loadCatalog(false);}}
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+  document.querySelectorAll("[data-view]").forEach(function(el){el.addEventListener("click",function(){showView(el.dataset.view);});});
+  function setDot(id,ok,warn){$(id).className="dot"+(ok?" ok":warn?" warn":"");}
+  async function refreshStatus(){
+    try{
+      const res=await fetch("/api/status",{cache:"no-store"});
+      const data=await res.json();
+      $("apiStatus").textContent=data.api==="online"?"API online":"API unavailable";
+      setDot("apiDot",data.api==="online",false);
+      const db=data.supabase||{};
+      $("dbStatus").textContent=db.connected?("Supabase / "+(db.records==null?"connected":Number(db.records).toLocaleString()+" records")):(db.configured?"Database unreachable":"Database not configured");
+      setDot("dbDot",!!db.connected,!!db.configured&&!db.connected);
+      $("catalogCount").textContent=db.connected&&db.records!=null?Number(db.records).toLocaleString():"—";
+      loginConfigured=!!data.catalog_login_configured;
+      syncCatalogGate();
+    }catch(e){
+      $("apiStatus").textContent="API unavailable";setDot("apiDot",false,true);
+      $("dbStatus").textContent="Database status unknown";setDot("dbDot",false,true);
+    }
+  }
+  async function refreshSession(){
+    try{
+      const r=await fetch("/api/session",{cache:"no-store"});
+      const d=await r.json();
+      isAuthenticated=!!d.authenticated;loginConfigured=!!d.login_configured;syncCatalogGate();
+    }catch(e){}
+  }
+  function syncCatalogGate(){
+    $("catalogLogin").style.display=isAuthenticated?"none":"block";
+    $("catalogArea").style.display=isAuthenticated?"block":"none";
+    $("setupHelp").style.display=!loginConfigured?"block":"none";
+    $("loginForm").style.display=loginConfigured?"grid":"none";
+    $("catalogGateTitle").textContent=loginConfigured?"Private catalogue":"Dashboard setup required";
+    $("catalogGateText").textContent=loginConfigured?"Sign in using the dashboard password configured by the project owner.":"The rule catalogue remains locked until server-side authentication is configured.";
+  }
+  function showNotice(id,message,kind){
+    const el=$(id);el.textContent=message;el.className="notice show"+(kind?" "+kind:"");
+  }
+  function clearNotice(id){$(id).className="notice";$(id).textContent="";}
+  function renderDecision(data){
+    $("emptyResult").style.display="none";$("resultView").classList.add("show");
+    const overall=String(data.verdict||"ESCALATE").toUpperCase();
+    $("overallVerdict").textContent=overall;$("overallVerdict").className="verdict "+overall;
+    $("overallReason").textContent=data.reason||"No reason was returned.";
+    $("decisionMeta").textContent="Session: "+(data.session_id||"—")+" · Decided by: "+(data.decided_by||"—");
+    const entries=Object.entries(data.ministers||{});
+    $("ministerResults").innerHTML=entries.map(function(item){
+      const name=item[0],val=item[1]||{},v=String(val.verdict||"ESCALATE").toUpperCase();
+      const confidence=typeof val.confidence==="number"?" · confidence "+val.confidence.toFixed(2):"";
+      const match=val.matched_id?" · rule "+val.matched_id:"";
+      return '<div class="minister-result"><div class="minister-title"><strong>'+escapeHtml(name)+'</strong><span class="mini-verdict '+escapeHtml(v)+'">'+escapeHtml(v)+'</span></div><p class="minister-reason">'+escapeHtml(val.reason||"No reason returned.")+'</p><p class="tiny-note">'+escapeHtml(match+confidence)+'</p></div>';
+    }).join("")||'<div class="rules-empty">No minister details were returned.</div>';
+  }
+  $("checkForm").addEventListener("submit",async function(event){
+    event.preventDefault();clearNotice("checkNotice");
+    let args;
+    try{args=JSON.parse($("arguments").value);if(!args||Array.isArray(args)||typeof args!=="object")throw new Error("Arguments must be a JSON object.");}
+    catch(e){showNotice("checkNotice","Invalid JSON: "+e.message,"error");return;}
+    const context={};
+    if($("userInstruction").value.trim())context.user_instruction=$("userInstruction").value.trim();
+    if($("accountEmail").value.trim())context.account_email=$("accountEmail").value.trim();
+    if($("toolOutput").value.trim())context.tool_output=$("toolOutput").value.trim();
+    const payload={tool_name:$("toolName").value.trim(),arguments:args,session_id:$("sessionId").value.trim(),context:context};
+    $("checkButton").disabled=true;$("checkButton").textContent="Inspecting…";
+    try{
+      const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      const data=await r.json();
+      if(!r.ok)throw new Error(data.detail||"Request failed ("+r.status+").");
+      renderDecision(data);showNotice("checkNotice","Inspection complete. No tool was executed.","success");
+    }catch(e){showNotice("checkNotice",e.message||"Could not reach the Kavach API.","error");}
+    finally{$("checkButton").disabled=false;$("checkButton").innerHTML='Run safety check <span aria-hidden="true">↗</span>';}
+  });
+  $("resetButton").addEventListener("click",function(){
+    $("toolName").value="bash";$("sessionId").value="demo-session";$("arguments").value='{ "command": "echo hello" }';
+    $("userInstruction").value="";$("accountEmail").value="";$("toolOutput").value="";clearNotice("checkNotice");
+  });
+  document.querySelectorAll("[data-example]").forEach(function(btn){btn.addEventListener("click",function(){
+    const type=btn.dataset.example;
+    $("toolName").value=type==="send"?"email":"bash";
+    $("arguments").value=JSON.stringify(type==="benign"?{command:"echo hello"}:type==="sensitive"?{command:"cat ~/.ssh/id_rsa"}:{to:"outside@example.com",subject:"Report",body:"Here is the data"},null,2);
+    if(type==="send")$("userInstruction").value="Do not send messages or share any private information.";
+    showView("check");
+  });});
+  $("loginForm").addEventListener("submit",async function(e){
+    e.preventDefault();clearNotice("loginNotice");
+    try{
+      const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("loginPassword").value})});
+      const d=await r.json();if(!r.ok)throw new Error(d.detail||"Sign-in failed.");
+      isAuthenticated=true;$("loginPassword").value="";syncCatalogGate();currentPage=1;await loadCatalog(true);
+      showNotice("catalogMeta","Signed in. The catalogue is read-only.","success");
+    }catch(err){showNotice("loginNotice",err.message||"Sign-in failed.","error");}
+  });
+  $("logoutButton").addEventListener("click",async function(){
+    try{await fetch("/api/logout",{method:"POST"});}catch(e){}
+    isAuthenticated=false;syncCatalogGate();$("ruleList").innerHTML="";await refreshSession();
+  });
+  $("catalogReload").addEventListener("click",function(){if(isAuthenticated)loadCatalog(true);else refreshStatus();});
+  $("searchRules").addEventListener("click",function(){currentPage=1;loadCatalog(true);});
+  $("ruleSearch").addEventListener("keydown",function(e){if(e.key==="Enter"){e.preventDefault();currentPage=1;loadCatalog(true);}});
+  $("ministerFilter").addEventListener("change",function(){currentPage=1;loadCatalog(true);});
+  $("prevPage").addEventListener("click",function(){if(currentPage>1){currentPage--;loadCatalog(true);}});
+  $("nextPage").addEventListener("click",function(){if(catalogTotal==null||currentPage*50<catalogTotal){currentPage++;loadCatalog(true);}});
+  async function loadCatalog(showErrors){
+    if(!isAuthenticated)return;
+    const q=$("ruleSearch").value.trim(),minister=$("ministerFilter").value;
+    const params=new URLSearchParams({page:String(currentPage)});if(q)params.set("search",q);if(minister)params.set("minister",minister);
+    $("ruleList").innerHTML='<div class="rules-empty">Loading definitions from Supabase…</div>';
+    try{
+      const r=await fetch("/api/catalog?"+params.toString(),{cache:"no-store"});const d=await r.json();
+      if(r.status===401){isAuthenticated=false;syncCatalogGate();return;}
+      if(!r.ok)throw new Error(d.detail||"Catalogue request failed.");
+      const records=d.records||[];catalogTotal=d.total;
+      $("catalogMeta").textContent=(catalogTotal==null?"":Number(catalogTotal).toLocaleString()+" records in archive · ")+"Read-only · page "+d.page;
+      $("pageStatus").textContent="Page "+d.page+(catalogTotal==null?"":" of "+Math.max(1,Math.ceil(catalogTotal/50)));
+      $("prevPage").disabled=d.page<=1;$("nextPage").disabled=catalogTotal!=null&&d.page*50>=catalogTotal;
+      if(!records.length){$("ruleList").innerHTML='<div class="rules-empty">No definitions match those filters.</div>';return;}
+      $("ruleList").innerHTML=records.map(function(row){
+        const title=row.definition_id||row.record_key||"Untitled definition";
+        const descriptions=[row.l1_intent,row.l2_mechanism,row.l3_surface].filter(Boolean);
+        const source=row.repo_path?row.repo_path+" · "+(row.git_ref||""):row.source_url||"Source not recorded";
+        const tech=Array.isArray(row.technique_ids)?row.technique_ids.join(", "):"";
+        return '<article class="rule-card"><div class="rule-top"><span class="rule-id">'+escapeHtml(title)+'</span><div class="rule-tags"><span class="tag">'+escapeHtml(row.minister)+'</span><span class="tag">'+escapeHtml(row.definition_type)+'</span><span class="tag review">'+escapeHtml(row.review_status||"unreviewed")+'</span><span class="tag">'+escapeHtml(row.origin_status||"unknown")+'</span></div></div><p class="rule-desc">'+escapeHtml(descriptions.join(" · ")||row.category||"No plain-language description recorded.")+'</p><div class="rule-context">'+escapeHtml(source)+(tech?" · ATT&CK: "+escapeHtml(tech):"")+'</div>'+(row.source_citation?'<div class="rule-context">Citation: '+escapeHtml(row.source_citation)+'</div>':"")+'</article>';
+      }).join("");
+    }catch(e){
+      $("ruleList").innerHTML='<div class="rules-empty">'+escapeHtml(e.message||"Could not load catalogue.")+'</div>';
+      if(showErrors)showNotice("catalogMeta",e.message||"Catalogue request failed.","error");
+    }
+  }
+  refreshStatus();refreshSession();
+})();
+</script>
+</body>
+</html>

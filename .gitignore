@@ -5,10 +5,3 @@ __pycache__/
 .DS_Store
 # NAVIGATOR's ChromaDB, rebuilt from kavach/data/kavach_corpus_v1.json
 .chroma_navigator/
-
-# Supabase / secrets: never commit
-.env
-.env.*
-supabase/.temp/
-supabase/.branches/
-*.pem
