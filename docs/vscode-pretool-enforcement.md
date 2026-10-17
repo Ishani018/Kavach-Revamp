@@ -14,7 +14,7 @@ VS Code agent hooks are currently a Preview feature. This first integration inte
 ## Components
 
 - **scripts/kavach_vscode_hook.py**: stdlib-only hook bridge. It reads hook JSON from stdin and writes VS Code's documented JSON decision to stdout.
-- **.github/hooks/kavach.json**: registers prompt, pre-tool, and post-tool hooks.
+- **.github/hooks/kavach.json**: registers all eight hook events (see below).
 - **POST /check**: existing coordinator API; no new cloud endpoint is needed.
 - **POST /observe**: inspects what already happened: a submitted prompt (`UserPromptSubmit`) or a finished tool's output (`PostToolUse`). Only ministers with something to say about that event report; the Speaker combines them the same way.
 
@@ -34,6 +34,22 @@ Content scanning uses value-shaped rules only. The access rules VAULT applies to
 Failure handling differs from PreToolUse on purpose. If `/observe` is unavailable or returns an invalid reply, the prompt is still sent and the tool result still returned (each with a message saying it was not inspected), because blocking there would stop the user typing or hide output from an action that already happened. Every later tool call still goes through the fail-closed PreToolUse check.
 
 The `decision: block` / `continue: false` outputs for these two events follow the documented hook output format, but, as with `ask`, they have not yet been verified in a live VS Code Local session. Check them the same way as step 4 below before relying on them.
+
+## Every hook, and agents that start agents
+
+`.github/hooks/kavach.json` registers all eight Local-harness events. Hook payloads carry `session_id` and, inside a sub-agent, `agent_id` / `agent_type`; the bridge forwards both.
+
+| Hook | What Kavach does |
+|---|---|
+| **SessionStart** | Registers the session and tells the agent `KAVACH ACTIVE` (or `KAVACH UNAVAILABLE` when the local API is down; it never claims protection that is not running). After `resume` or `compact` it re-injects the session summary: counts, whether sensitive data was handled, and recent denials with rule IDs, so the agent does not retry a denied action another way. |
+| **UserPromptSubmit**, **PostToolUse** | See [Prompt and tool-output inspection](#prompt-and-tool-output-inspection). |
+| **PreToolUse** | The four-minister check, attributed to the agent that proposed it. |
+| **SubagentStart** | Registers the sub-agent under its session and tells it that it shares the session's restrictions. (This hook cannot block.) |
+| **SubagentStop** | Inspects the sub-agent's report (`last_assistant_message`) before it reaches the parent. A secret sends the sub-agent back once to rewrite it; with `stop_hook_active` set it warns instead of looping. |
+| **PreCompact** | Recorded. Kavach's state is held by the local service, not the transcript, so compaction loses nothing; `SessionStart(source=compact)` restores the summary in the agent's context. |
+| **Stop** | Inspects the final answer the same way. |
+
+**Shared state across agents.** Kavach keeps an agent tree (`kavach/agents.py`). Each tree is one security *domain*: CHANNEL's taint and provenance and NAVIGATOR's task contract and event ledger are shared by every agent in it. A secret a sub-agent reads, or puts in its report, restricts what the parent may send, and the reverse. Sub-agents in one VS Code session join automatically. An orchestrator that runs agents in separate sessions links them with `POST /observe {"event": "SessionStart", "session_id": CHILD, "parent_session_id": PARENT}`; cycles, re-parenting and trees deeper than 16 are refused with 409. Ministers that judge a call on its own run in parallel, NAVIGATOR runs after them, and calls within one domain are serialized so state follows decision order even when agents act concurrently.
 
 ## What appears in VS Code chat
 

@@ -46,7 +46,15 @@ def build_default_coordinator() -> Coordinator:
     from .ministers.navigator import NavigatorMinister
     from .ministers.vault import VaultMinister
 
-    return Coordinator([VaultMinister(), ExecutorMinister(), ChannelMinister(), NavigatorMinister()])
+    from .ai import from_env
+
+    ai = from_env()
+    if ai.enabled:
+        log.info("AI evidence is %s (model %s)", ai.mode, ai.model)
+    coordinator = Coordinator([VaultMinister(ai=ai), ExecutorMinister(ai=ai), ChannelMinister(ai=ai),
+                               NavigatorMinister(ai=ai)])
+    coordinator.ai = ai
+    return coordinator
 
 
 def _dashboard_auth_configured() -> bool:
@@ -126,7 +134,9 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "ministers": list(MINISTER_NAMES)}
+        ai = getattr(state["coordinator"], "ai", None)
+        return {"status": "ok", "ministers": list(MINISTER_NAMES),
+                "ai_evidence": ai.mode if ai is not None else "off"}
 
     @app.get("/api/session")
     def session_status(request: Request) -> dict[str, bool]:

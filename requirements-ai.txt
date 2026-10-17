@@ -1,0 +1,2 @@
+# Optional: only needed for KAVACH_AI=live (see docs/ai-evidence.md).
+anthropic>=1.15,<2

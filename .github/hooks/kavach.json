@@ -8,7 +8,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "UserPromptSubmit": [
@@ -19,7 +19,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "PreToolUse": [
@@ -41,7 +41,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "SubagentStart": [
@@ -52,7 +52,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "SubagentStop": [
@@ -63,7 +63,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "PreCompact": [
@@ -74,7 +74,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ],
     "Stop": [
@@ -85,7 +85,7 @@
         "linux": "python3 scripts/kavach_vscode_hook.py",
         "windows": "py -3 scripts\\kavach_vscode_hook.py",
         "cwd": ".",
-        "timeout": 5
+        "timeout": 15
       }
     ]
   }

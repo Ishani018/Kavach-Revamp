@@ -25,7 +25,12 @@ MAX_PROMPT_CHARS = 12_000
 MAX_REASON_CHARS = 500
 CONTEXT_TTL_SECONDS = 8 * 60 * 60
 DEFAULT_API_URL = "http://127.0.0.1:8088"
-API_TIMEOUT_SECONDS = 5.0
+# Kavach answers in milliseconds with AI evidence off; with it on, one model
+# question may take up to KAVACH_AI_TIMEOUT (4 s) per minister stage.
+try:
+    API_TIMEOUT_SECONDS = float(os.environ.get("KAVACH_HOOK_API_TIMEOUT", "12"))
+except ValueError:
+    API_TIMEOUT_SECONDS = 12.0
 
 class _NoRedirectHandler(HTTPRedirectHandler):
     """Never forward tool arguments to a redirected URL, even from loopback."""
@@ -638,9 +643,15 @@ def _handle_user_prompt_submit(
         return {"continue": True, "systemMessage": message + " The prompt was not inspected."}
     _observation_audit(event, data_home=data_home, tool_name="(prompt)", text=prompt,
                        verdict=verdict, ministers=ministers)
-    if verdict != "BLOCK":
+    if verdict == "ALLOW":
         store()
         return {"continue": True}
+    if verdict == "ESCALATE":
+        store()
+        report = _observation_report("KAVACH PROMPT REVIEW", verdict, ministers)
+        return {"continue": True, "systemMessage": (
+            "Kavach: this prompt may contain a credential (not a known format, so it was not "
+            "stopped). Consider removing it.\n" + report)}
     # A blocked prompt is never saved as session context: it holds a secret.
     reason = (
         "Kavach stopped this prompt before it reached the model: it contains secret material "

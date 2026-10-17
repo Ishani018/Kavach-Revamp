@@ -18,9 +18,10 @@ This is the extracted working core of the research project. NAVIGATOR runtime wo
 ## Request flow
 
 ```
-POST /check {tool_name, arguments, session_id}
+POST /check {tool_name, arguments, session_id, agent_id?}
   → validate (schemas.ToolCall)
-  → VAULT, EXECUTOR, CHANNEL, NAVIGATOR   (always all four, sequentially, no routing)
+  → resolve the agent's tree (domain); serialize within that domain
+  → VAULT, EXECUTOR, CHANNEL in parallel, then NAVIGATOR with their results   (always all four, no routing)
   → a minister that raises or returns a malformed result is recorded as ESCALATE
   → Speaker.decide()
   → {verdict, reason, decided_by, ministers: {name: {verdict, reason, matched_id, confidence, diagnostics}}}
@@ -29,6 +30,10 @@ POST /check {tool_name, arguments, session_id}
 Speaker policy: any BLOCK → BLOCK; else any ESCALATE → ESCALATE; else any missing/duplicate/unexpected/malformed result → ESCALATE; ALLOW only when all four ministers returned a valid ALLOW. Confidence ties resolve by fixed minister order.
 
 `POST /observe {event, session_id, text, tool_name?, arguments?}` handles hook events that report something that already happened: `UserPromptSubmit` (the prompt) and `PostToolUse` (a tool's output). Ministers that implement `observe()` (VAULT, CHANNEL, NAVIGATOR) inspect the text and update session state, in the same fixed order; the Speaker combines only the ministers that reported. See [prompt and tool-output inspection](docs/vscode-pretool-enforcement.md#prompt-and-tool-output-inspection).
+
+Every call and observation is attributed to an agent and resolved to its agent tree (`kavach/agents.py`); ministers keep state per tree, so parent and sub-agents share taint, provenance and NAVIGATOR's contract. Lifecycle events (`SessionStart`, `SubagentStart`, `SubagentStop`, `PreCompact`, `Stop`) also go to `/observe`. See [every hook, and agents that start agents](docs/vscode-pretool-enforcement.md#every-hook-and-agents-that-start-agents).
+
+**AI evidence (off by default).** Ministers can ask a model for evidence that code verifies or that can only add caution: decoding obfuscated commands (EXECUTOR), the role of an unknown tool (CHANNEL), whether an unrecognised token is a credential (VAULT), and an explanation for flagged actions (NAVIGATOR). Answers are recorded and replayable, so verdicts stay deterministic. See [AI evidence](docs/ai-evidence.md).
 
 Secrets matched by VAULT are never echoed in results or logs. Exception messages from ministers are not copied into responses.
 

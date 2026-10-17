@@ -629,3 +629,11 @@ def test_hook_config_registers_every_supported_event() -> None:
     config = json.loads((ROOT / ".github" / "hooks" / "kavach.json").read_text(encoding="utf-8"))
     assert set(config["hooks"]) == {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
                                     "SubagentStart", "SubagentStop", "PreCompact", "Stop"}
+
+
+def test_escalated_prompt_continues_with_a_caution(tmp_path: Path) -> None:
+    reply = observation_result("ESCALATE", "UserPromptSubmit")
+    with fake_kavach_api(api_result("ALLOW"), reply) as (url, _):
+        output = run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "vscode-session-01",
+                           "prompt": "use DB_PASSWORD=hunter2hunter2"}, tmp_path, url)
+    assert output["continue"] is True and "may contain a credential" in output["systemMessage"]

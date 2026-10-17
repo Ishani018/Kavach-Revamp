@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from . import observed_source
+from ..ai import AIEvidence
 from .navigator2 import Navigator2
 from ..schemas import MinisterResult, Observation, ToolCall
 
@@ -18,7 +19,11 @@ from ..schemas import MinisterResult, Observation, ToolCall
 class NavigatorMinister:
     name = "NAVIGATOR"
 
-    def __init__(self, navigator: Optional[Navigator2] = None) -> None:
+    def __init__(self, navigator: Optional[Navigator2] = None, ai: Optional[AIEvidence] = None) -> None:
+        if navigator is None and ai is not None and ai.enabled:
+            from ..ai.reasoner import AIReasonerProvider
+            navigator = Navigator2(reasoner_provider=AIReasonerProvider(ai),
+                                   reasoner_timeout_seconds=ai.timeout + 1.0)
         self.navigator2 = navigator or Navigator2()
 
     def start_session(self, session_id: str, *, goal: str, **contract_fields: Any):
@@ -35,6 +40,16 @@ class NavigatorMinister:
         sub-agent's report, the final answer), so POL-009 sees it as a prior
         sensitive read. Other observations add nothing to the ledger: every
         extra event lengthens the history Invariant evaluates."""
+        if obs.event == "UserPromptSubmit":
+            # The prompt is the trusted user boundary: seed the task contract
+            # from it, exactly as check() does from context.user_instruction.
+            # A prompt VAULT blocked never reaches the model, so it is skipped.
+            vault = prior_results.get("VAULT")
+            existing = self.navigator2.contract_store.get(obs.session_id)
+            if obs.text.strip() and (vault is None or vault.verdict != "BLOCK") and (
+                    existing is None or existing.version < 1):
+                self.navigator2.contract_store.start_session(obs.session_id, goal=obs.text.strip())
+            return None
         source = observed_source(obs)
         vault = prior_results.get("VAULT")
         if source is None or vault is None or vault.verdict != "BLOCK":
