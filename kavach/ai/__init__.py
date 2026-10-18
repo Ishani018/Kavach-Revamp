@@ -26,7 +26,8 @@ evidence, which leaves the deterministic result unchanged.
 Configuration (environment):
   KAVACH_AI          off (default) | live | replay
   KAVACH_AI_RECORD   path of a JSONL answer record (written in live, read in replay)
-  KAVACH_AI_MODEL    model id (default claude-opus-5-5)
+  KAVACH_AI_PROVIDER anthropic (default) | groq
+  KAVACH_AI_MODEL    model id (default claude-opus-5-5; openai/gpt-oss-120b for groq)
   KAVACH_AI_TIMEOUT  seconds per question (default 4)
   KAVACH_AI_INTENT   on | off (default): also ask whether each consequential
                      action fits the user's task (NAVIGATOR POL-011)

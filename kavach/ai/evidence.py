@@ -17,6 +17,8 @@ from .schema import SchemaError, validate
 log = logging.getLogger("kavach.ai")
 
 DEFAULT_MODEL = "claude-opus-5-5"
+PROVIDERS = ("anthropic", "groq")
+DEFAULT_MODELS = {"anthropic": DEFAULT_MODEL, "groq": "openai/gpt-oss-120b"}
 MODES = ("off", "live", "replay")
 
 
@@ -146,7 +148,8 @@ class AIEvidence:
         if self.record_path is None or key in self._recorded:
             return
         self._recorded.add(key)
-        line = json.dumps({"key": key, "task": task.name, "version": task.version, "answer": data},
+        line = json.dumps({"key": key, "task": task.name, "version": task.version, "model": self.model,
+                           "answer": data},
                           sort_keys=True, ensure_ascii=False) + "\n"
         self.record_path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(self.record_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -172,7 +175,11 @@ def from_env(provider_factory: Optional[Callable[[str, float], Provider]] = None
     provider (SDK missing, no credentials) falls back to off, loudly."""
     mode = os.environ.get("KAVACH_AI", "off").strip().lower() or "off"
     record = os.environ.get("KAVACH_AI_RECORD") or None
-    model = os.environ.get("KAVACH_AI_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    provider_name = os.environ.get("KAVACH_AI_PROVIDER", "anthropic").strip().lower() or "anthropic"
+    if provider_name not in PROVIDERS:
+        log.error("KAVACH_AI_PROVIDER=%r is not one of %s; AI evidence is off", provider_name, PROVIDERS)
+        return AIEvidence("off")
+    model = os.environ.get("KAVACH_AI_MODEL", "").strip() or DEFAULT_MODELS[provider_name]
     try:
         timeout = float(os.environ.get("KAVACH_AI_TIMEOUT", "4"))
     except ValueError:
@@ -185,7 +192,10 @@ def from_env(provider_factory: Optional[Callable[[str, float], Provider]] = None
         return AIEvidence(mode, record_path=Path(record) if record else None, timeout=timeout, model=model,
                           intent_checks=intent)
     try:
-        if provider_factory is None:
+        if provider_factory is None and provider_name == "groq":
+            from .groq_provider import GroqProvider
+            provider_factory = GroqProvider
+        elif provider_factory is None:
             from .anthropic_provider import AnthropicProvider
             provider_factory = AnthropicProvider
         provider = provider_factory(model, timeout)

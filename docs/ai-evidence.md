@@ -45,7 +45,9 @@ python -m uvicorn kavach.api:app --host 127.0.0.1 --port 8088
 curl localhost:8088/health                  # reports "ai_evidence": "live"
 ```
 
-Live mode uses the Claude API with structured JSON output, low effort, and `fallbacks: "default"` so a request declined by one model's safety classifier is retried on another. If the SDK or credentials are missing, Kavach logs an error and runs with AI evidence off.
+**Groq instead of Claude:** set `KAVACH_AI_PROVIDER=groq` and `GROQ_API_KEY` (no extra package; it uses `httpx`). The default model is `openai/gpt-oss-120b`; override with `KAVACH_AI_MODEL`. Requests ask for schema-constrained JSON at temperature 0 and fall back to plain JSON mode for models without it; answers are validated locally either way. To record the replay set from Groq: `KAVACH_AI=live KAVACH_AI_PROVIDER=groq python -m evaluation.ai_replay.run_replay --record`, then `--write-expected`. Each record line names the model, and replay uses it automatically.
+
+Live mode with the default provider uses the Claude API with structured JSON output, low effort, and `fallbacks: "default"` so a request declined by one model's safety classifier is retried on another. If the SDK or credentials are missing, Kavach logs an error and runs with AI evidence off.
 
 **Data that leaves the machine in live mode:** commands with obfuscation signals (secrets redacted), unknown tool names with argument names, masked token previews, and NAVIGATOR's redacted review payload for already-flagged actions. Nothing is sent with `KAVACH_AI=off` or `replay`.
 

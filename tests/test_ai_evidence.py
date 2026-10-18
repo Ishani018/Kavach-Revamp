@@ -348,3 +348,93 @@ def test_intent_flag_from_env(monkeypatch):
     assert from_env().intent_checks is True
     monkeypatch.setenv("KAVACH_AI", "off")
     assert from_env().intent_checks is False
+
+
+# ---------- Groq provider (local fake server, no network) ----------
+
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+from kavach.ai.groq_provider import GroqProvider
+
+
+def fake_groq(replies):
+    """Serves queued (status, body) replies; records each request body."""
+    seen = []
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen.append((dict(self.headers), json.loads(self.rfile.read(int(self.headers["content-length"])))))
+            status, body = replies.pop(0)
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *a):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+def groq(monkeypatch, replies):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_not_real")
+    server, seen = fake_groq(replies)
+    provider = GroqProvider("openai/gpt-oss-120b", 4.0)
+    provider.url = f"http://127.0.0.1:{server.server_address[1]}/openai/v1/chat/completions"
+    return provider, seen, server
+
+
+def chat(content, finish="stop"):
+    return {"choices": [{"message": {"content": content}, "finish_reason": finish}]}
+
+
+def test_groq_request_shape(monkeypatch):
+    provider, seen, server = groq(monkeypatch, [(200, chat('{"ok": true}'))])
+    try:
+        assert provider.complete(SIMPLE, {"command": "ls"}) == {"ok": True}
+    finally:
+        server.shutdown()
+    headers, body = seen[0]
+    assert headers["Authorization"] == "Bearer gsk_test_not_real"
+    assert body["model"] == "openai/gpt-oss-120b" and body["temperature"] == 0
+    assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert "DATA" in body["messages"][0]["content"]
+    assert json.loads(body["messages"][1]["content"]) == {"command": "ls"}
+
+
+def test_groq_falls_back_to_json_mode_when_schema_mode_is_unsupported(monkeypatch):
+    provider, seen, server = groq(monkeypatch, [(400, {"error": "unsupported"}), (200, chat('{"ok": false}'))])
+    try:
+        assert provider.complete(SIMPLE, {}) == {"ok": False}
+    finally:
+        server.shutdown()
+    assert seen[1][1]["response_format"] == {"type": "json_object"}
+    assert "must match this schema" in seen[1][1]["messages"][0]["content"]
+
+
+@pytest.mark.parametrize("reply", [(500, {}), (200, chat("not json")), (200, chat('{"ok": true}', "length"))])
+def test_groq_errors_give_no_answer(monkeypatch, reply):
+    provider, _, server = groq(monkeypatch, [reply])
+    try:
+        assert provider.complete(SIMPLE, {}) is None
+    finally:
+        server.shutdown()
+
+
+def test_from_env_selects_groq_and_its_default_model(monkeypatch):
+    monkeypatch.setenv("KAVACH_AI", "live")
+    monkeypatch.setenv("KAVACH_AI_PROVIDER", "groq")
+    monkeypatch.delenv("KAVACH_AI_MODEL", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_not_real")
+    ai = from_env()
+    assert ai.mode == "live" and ai.model == "openai/gpt-oss-120b"
+    monkeypatch.delenv("GROQ_API_KEY")
+    assert from_env().mode == "off"                 # no key: off, loudly
+    monkeypatch.setenv("KAVACH_AI_PROVIDER", "nope")
+    assert from_env().mode == "off"
