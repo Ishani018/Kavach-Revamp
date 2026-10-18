@@ -55,6 +55,7 @@ NAVIGATOR_POLICY_TITLES = {
     "POL-007": "insufficient-evidence-coverage",
     "POL-008": "explicit-task-restriction-violation",
     "POL-009": "prior-sensitive-artifact-to-unauthorized-destination",
+    "POL-010": "delegation-depth-exceeded",
 }
 
 

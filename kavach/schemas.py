@@ -38,6 +38,9 @@ class ToolCall(BaseModel):
     # shared across the agent tree (see kavach/agents.py); this is attribution.
     agent_id: Optional[str] = Field(default=None, max_length=256)
     agent_type: Optional[str] = Field(default=None, max_length=256)
+    # Depth in the agent tree (0 = the session's main agent). Set by the
+    # Coordinator from its own registry; any caller-supplied value is replaced.
+    agent_depth: int = Field(default=0, ge=0)
 
     @model_validator(mode="before")
     @classmethod

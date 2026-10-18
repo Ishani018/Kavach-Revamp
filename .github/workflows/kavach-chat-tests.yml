@@ -2,13 +2,13 @@ name: Kavach Chat extension tests
 
 on:
   pull_request:
-    branches: [mvp-core]
+    branches: [main, mvp-core]
     paths:
       - 'vscode-extension/**'
       - '.vscode/launch.json'
       - '.github/workflows/kavach-chat-tests.yml'
   push:
-    branches: [mvp-core]
+    branches: [main, mvp-core]
     paths:
       - 'vscode-extension/**'
       - '.vscode/launch.json'

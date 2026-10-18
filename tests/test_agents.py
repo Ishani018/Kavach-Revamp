@@ -208,3 +208,76 @@ def test_invalid_link_is_a_409():
 def test_subagent_events_need_an_agent_id():
     c = TestClient(create_app(Coordinator([Stub(n) for n in MINISTER_NAMES])))
     assert c.post("/observe", json={"event": "SubagentStop", "session_id": "s", "text": "x"}).status_code == 422
+
+
+# ---------- POL-010: delegation depth ----------
+
+def _ls(session, agent=None, depth=None):
+    body = {"tool_name": "run_in_terminal", "arguments": {"command": "ls"}, "session_id": session,
+            "context": {"user_instruction": "list files"}}
+    if agent:
+        body["agent_id"] = agent
+    if depth is not None:
+        body["agent_depth"] = depth
+    return body
+
+
+def _nav_policies(decision):
+    return decision.ministers["NAVIGATOR"].diagnostics["policy_ids"]
+
+
+def test_agents_within_the_depth_limit_are_not_escalated(navigator, monkeypatch):
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "bash")
+    c = real(navigator)
+    c.observe({"event": "SessionStart", "session_id": "l1", "parent_session_id": "root"})
+    c.observe({"event": "SessionStart", "session_id": "l2", "parent_session_id": "l1"})
+    d = c.evaluate(_ls("l2", "worker"))             # depth 3 == default limit
+    assert d.agent_depth == 3 and "POL-010" not in _nav_policies(d)
+
+
+def test_agents_deeper_than_the_limit_escalate(navigator, monkeypatch):
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "bash")
+    c = real(navigator)
+    for child, parent in (("l1", "root"), ("l2", "l1"), ("l3", "l2")):
+        c.observe({"event": "SessionStart", "session_id": child, "parent_session_id": parent})
+    d = c.evaluate(_ls("l3", "worker"))             # depth 4 > 3
+    assert d.agent_depth == 4
+    assert d.verdict == "ESCALATE" and "POL-010" in _nav_policies(d)
+
+
+def test_caller_cannot_forge_a_shallower_depth(navigator, monkeypatch):
+    monkeypatch.setenv("KAVACH_TERMINAL_DIALECT", "bash")
+    c = real(navigator)
+    for child, parent in (("l1", "root"), ("l2", "l1"), ("l3", "l2")):
+        c.observe({"event": "SessionStart", "session_id": child, "parent_session_id": parent})
+    d = c.evaluate(_ls("l3", "worker", depth=0))
+    assert "POL-010" in _nav_policies(d)
+    shallow = c.evaluate(_ls("root", depth=9))      # nor a deeper one onto the main agent
+    assert "POL-010" not in _nav_policies(shallow)
+
+
+def test_depth_limit_comes_from_the_contract(monkeypatch):
+    from kavach.ministers.navigator2.policy import DelegationDepthPolicy, PolicyFacts
+    from kavach.ministers.navigator2.schemas import SessionEvent, TaskContract
+    monkeypatch.setenv("KAVACH_MAX_AGENT_DEPTH", "0")
+    contract = TaskContract(session_id="s")
+    assert contract.max_agent_depth == 0
+    event = SessionEvent(session_id="s", event_id="s:0", seq=0, timestamp=0, tool_name="bash", agent_depth=1)
+    facts = PolicyFacts(contract=contract, event=event, recent_events=[], evidence=[], legacy_minister_results={})
+    assert DelegationDepthPolicy().evaluate(facts).verdict == "escalate"
+    assert DelegationDepthPolicy().evaluate(PolicyFacts(
+        contract=TaskContract(session_id="s", max_agent_depth=2), event=event, recent_events=[],
+        evidence=[], legacy_minister_results={})) is None
+
+
+def test_both_policy_engines_agree_on_pol010():
+    from kavach.ministers.navigator2.invariant_policy import InvariantPolicyEngine
+    from kavach.ministers.navigator2.policy import PolicyEngine, PolicyFacts
+    from kavach.ministers.navigator2.schemas import SessionEvent, TaskContract
+    for depth, expected in ((1, False), (2, True)):
+        event = SessionEvent(session_id="s", event_id="s:0", seq=0, timestamp=0, tool_name="bash", agent_depth=depth)
+        facts = PolicyFacts(contract=TaskContract(session_id="s", goal="x", max_agent_depth=1), event=event,
+                            recent_events=[], evidence=[], legacy_minister_results={})
+        for engine in (InvariantPolicyEngine(), PolicyEngine()):
+            ids = {d.policy_id for d in engine.evaluate_all(facts)}
+            assert ("POL-010" in ids) is expected, (type(engine).__name__, depth)

@@ -6,8 +6,6 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-import anthropic
-
 from .evidence import Task
 
 log = logging.getLogger("kavach.ai.anthropic")
@@ -36,11 +34,15 @@ def api_schema(schema: Any) -> Any:
 
 class AnthropicProvider:
     def __init__(self, model: str, timeout: float) -> None:
+        import anthropic  # optional dependency (requirements-ai.txt), only needed for live mode
+
+        self._sdk = anthropic
         self.model = model
         # Kavach owns the time budget and fails closed; no SDK-level retries.
         self._client = anthropic.Anthropic(timeout=timeout, max_retries=0)
 
     def complete(self, task: Task, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        anthropic = self._sdk
         try:
             response = self._client.beta.messages.create(
                 model=self.model,

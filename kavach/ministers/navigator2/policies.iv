@@ -47,3 +47,8 @@ raise "BLOCK:POL-009" if:
     prior.function.arguments["__kavach_sensitive_artifact"] == True
     current.function.arguments["__kavach_current"] == True
     current.function.arguments["__kavach_unapproved_destination"] == True
+
+raise "ESCALATE:POL-010" if:
+    (call: ToolCall)
+    call.function.arguments["__kavach_current"] == True
+    call.function.arguments["__kavach_delegation_too_deep"] == True

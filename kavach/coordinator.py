@@ -74,7 +74,7 @@ class Coordinator:
             call = ToolCall.model_validate(call)
         node = self.registry.resolve(call.session_id, call.agent_id, call.agent_type)
         domain = self.registry.domain(node)
-        scoped = call.model_copy(update={"session_id": domain})
+        scoped = call.model_copy(update={"session_id": domain, "agent_depth": node.depth})
 
         with self.registry.domain_lock(domain):
             results = self._run_all(scoped)
