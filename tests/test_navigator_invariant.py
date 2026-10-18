@@ -43,7 +43,7 @@ def test_upstream_local_policy_loads_every_rule_the_python_engine_has():
     from kavach.ministers.navigator2.policy import DEFAULT_POLICIES
 
     engine = InvariantPolicyEngine()
-    assert [p.id for p in engine.policies] == [f"POL-{n:03d}" for n in range(1, 11)]
+    assert [p.id for p in engine.policies] == [f"POL-{n:03d}" for n in range(1, 12)]
     assert {p.id for p in engine.policies} == {p.id for p in DEFAULT_POLICIES}
     assert engine.ENGINE_VERSION.startswith("invariant-ai/0.3.5")
 

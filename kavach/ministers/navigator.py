@@ -21,9 +21,11 @@ class NavigatorMinister:
 
     def __init__(self, navigator: Optional[Navigator2] = None, ai: Optional[AIEvidence] = None) -> None:
         if navigator is None and ai is not None and ai.enabled:
+            from ..ai.intent import AIIntentChecker
             from ..ai.reasoner import AIReasonerProvider
             navigator = Navigator2(reasoner_provider=AIReasonerProvider(ai),
-                                   reasoner_timeout_seconds=ai.timeout + 1.0)
+                                   reasoner_timeout_seconds=ai.timeout + 1.0,
+                                   intent_checker=AIIntentChecker(ai) if ai.intent_checks else None)
         self.navigator2 = navigator or Navigator2()
 
     def start_session(self, session_id: str, *, goal: str, **contract_fields: Any):

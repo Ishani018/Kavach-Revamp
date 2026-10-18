@@ -28,6 +28,7 @@ This rebuild replaces semantic embedding retrieval as the active NAVIGATOR runti
 - POL-008 — Explicit denial: contract explicitly denies the tool name → BLOCK.
 - POL-009 — Cross-call sensitive transmit: an earlier permitted event touched a PRIVATE/SECRET artifact and current action transmits to an unapproved destination → BLOCK.
 - POL-010 — Delegation depth: the action comes from an agent deeper in the agent tree than the contract's `max_agent_depth` (default 3, `KAVACH_MAX_AGENT_DEPTH`). The depth comes from Kavach's agent registry, never the caller → ESCALATE.
+- POL-011 — Action outside the stated task: opt-in AI intent evidence (`KAVACH_AI_INTENT=on`) judged a consequential action (runs a command, writes, or contacts a destination) outside the contract's goal → ESCALATE. Never fires without the opt-in.
 
 The policy rules live in the Invariant DSL; the adapter still computes structured facts. The trace uses the ledger's full earlier history, not caller-supplied parent references. POL-009 is a conservative rule and requires the earlier event to have been recorded as ALLOW with the three earlier specialist results present and ALLOW.
 

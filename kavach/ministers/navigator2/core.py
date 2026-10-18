@@ -152,6 +152,7 @@ class Navigator2:
         evidence_modules: Optional[list] = None,
         relevant_event_window: int = 20,
         reasoner_timeout_seconds: float = _DEFAULT_REASONER_TIMEOUT_SECONDS,
+        intent_checker: Optional[Any] = None,
     ) -> None:
         self.contract_store = contract_store or TaskContractStore()
         self.ledger = ledger or SessionEventLedger()
@@ -164,6 +165,10 @@ class Navigator2:
         self.evidence_modules = evidence_modules
         self.relevant_event_window = relevant_event_window
         self.reasoner_timeout_seconds = reasoner_timeout_seconds
+        # Optional, opt-in: answers whether a consequential action fits the
+        # contract's goal. Its "no" is only a fact for POL-011 (escalate); it
+        # cannot allow anything. See kavach/ai/intent.py.
+        self.intent_checker = intent_checker
 
     def _needs_reasoner(self, contract, policy_decisions, evidence) -> bool:
         if any(d.verdict == "block" for d in policy_decisions):
@@ -312,12 +317,29 @@ class Navigator2:
 
         findings = evidence_mod.run_all(call, legacy_results, self.evidence_modules)
 
+        intent_mismatch = False
+        if self.intent_checker is not None:
+            try:
+                intent = self.intent_checker(contract, event, call)
+            except Exception as e:
+                intent = None
+                findings.append(EvidenceFinding(
+                    module="ai_intent", claim=f"intent check raised {type(e).__name__}; no intent evidence",
+                    confidence=0.0, coverage="partial"))
+            if intent is not None:
+                intent_mismatch, why, ai_provenance = intent
+                findings.append(EvidenceFinding(
+                    module="ai_intent",
+                    claim=("action does not fit the stated task: " if intent_mismatch else "action fits the stated task: ") + why,
+                    confidence=0.5, coverage="partial", supporting=dict(ai_provenance),
+                    event_ids=[event.event_id]))
+
         facts = PolicyFacts(
             contract=contract, event=event, recent_events=self.ledger.recent(session_id, self.relevant_event_window),
             evidence=findings, legacy_minister_results=legacy_verdicts, destinations=destinations,
             untrusted_revision_attempted=untrusted_revision_attempted,
             untrusted_revision_fields=untrusted_revision_fields,
-            session_history=prior_events,
+            session_history=prior_events, intent_mismatch=intent_mismatch,
         )
         policy_decisions = self.policy_engine.evaluate_all(facts)
 

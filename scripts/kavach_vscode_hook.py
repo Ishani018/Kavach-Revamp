@@ -26,11 +26,12 @@ MAX_REASON_CHARS = 500
 CONTEXT_TTL_SECONDS = 8 * 60 * 60
 DEFAULT_API_URL = "http://127.0.0.1:8088"
 # Kavach answers in milliseconds with AI evidence off; with it on, one model
-# question may take up to KAVACH_AI_TIMEOUT (4 s) per minister stage.
+# question may take up to KAVACH_AI_TIMEOUT (4 s): one in the parallel stage,
+# and up to two in NAVIGATOR (intent check, reasoner).
 try:
-    API_TIMEOUT_SECONDS = float(os.environ.get("KAVACH_HOOK_API_TIMEOUT", "12"))
+    API_TIMEOUT_SECONDS = float(os.environ.get("KAVACH_HOOK_API_TIMEOUT", "20"))
 except ValueError:
-    API_TIMEOUT_SECONDS = 12.0
+    API_TIMEOUT_SECONDS = 20.0
 
 class _NoRedirectHandler(HTTPRedirectHandler):
     """Never forward tool arguments to a redirected URL, even from loopback."""
@@ -56,6 +57,7 @@ NAVIGATOR_POLICY_TITLES = {
     "POL-008": "explicit-task-restriction-violation",
     "POL-009": "prior-sensitive-artifact-to-unauthorized-destination",
     "POL-010": "delegation-depth-exceeded",
+    "POL-011": "action-outside-stated-task",
 }
 
 

@@ -78,6 +78,13 @@ class ScriptedProvider:
                             for c in hits]}
 
     @staticmethod
+    def navigator_intent(p):
+        words = {w for w in re.findall(r"[a-z]{4,}", p["task"].lower())}
+        action = " ".join(filter(None, [p["tool"], p.get("command") or "", " ".join(p["writes"])])).lower()
+        fits = any(w in action for w in words)
+        return {"fits_task": fits, "reason": "shares the task's subject" if fits else "unrelated to the task"}
+
+    @staticmethod
     def navigator_reasoner(p):
         return {
             "assessment": "insufficient_evidence", "supporting_event_ids": [p["action"]["event_id"]],
@@ -131,9 +138,10 @@ def main(argv=None) -> int:
     if args.record:
         RECORD.unlink(missing_ok=True)
         if args.scripted:
-            make = lambda: AIEvidence("live", provider=ScriptedProvider(), record_path=RECORD)
+            make = lambda: AIEvidence("live", provider=ScriptedProvider(), record_path=RECORD, intent_checks=True)
         else:
             os.environ["KAVACH_AI_RECORD"] = str(RECORD)
+            os.environ["KAVACH_AI_INTENT"] = "on"
             make = from_env
             if make().mode != "live":
                 print("set KAVACH_AI=live (and credentials) to record from the model", file=sys.stderr)
@@ -141,7 +149,7 @@ def main(argv=None) -> int:
         run(make)
 
     off = run(lambda: AIEvidence("off"))
-    replay = lambda: AIEvidence("replay", record_path=RECORD, model=ScriptedProvider.model)
+    replay = lambda: AIEvidence("replay", record_path=RECORD, model=ScriptedProvider.model, intent_checks=True)
     first, second = run(replay), run(replay)
     problems = [] if first == second else ["two replays of the same record disagree"]
     problems += compare(off, first)
