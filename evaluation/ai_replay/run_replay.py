@@ -4,6 +4,7 @@ Replay the AI-evidence scenarios through the real ministers.
     python -m evaluation.ai_replay.run_replay --check            # replay the committed record, compare
     python -m evaluation.ai_replay.run_replay --write-expected   # replay, then rewrite expected.json
     KAVACH_AI=live python -m evaluation.ai_replay.run_replay --record   # ask the real model, rewrite record
+    KAVACH_AI=live KAVACH_AI_PROVIDER=groq python -m evaluation.ai_replay.run_replay --record
     python -m evaluation.ai_replay.run_replay --record --scripted       # rewrite record from the scripted provider
 
 Every scenario runs twice per mode in a fresh coordinator. The run fails if:
@@ -95,6 +96,15 @@ class ScriptedProvider:
         }
 
 
+def record_model() -> str:
+    """The model the committed record was made with (keys include it)."""
+    for line in RECORD.read_text().splitlines() if RECORD.is_file() else []:
+        model = json.loads(line).get("model")
+        if model:
+            return model
+    return ScriptedProvider.model
+
+
 def coordinator(ai: AIEvidence) -> Coordinator:
     return Coordinator([VaultMinister(ai=ai), ExecutorMinister(ai=ai), ChannelMinister(ai=ai),
                         NavigatorMinister(ai=ai)])
@@ -149,7 +159,7 @@ def main(argv=None) -> int:
         run(make)
 
     off = run(lambda: AIEvidence("off"))
-    replay = lambda: AIEvidence("replay", record_path=RECORD, model=ScriptedProvider.model, intent_checks=True)
+    replay = lambda: AIEvidence("replay", record_path=RECORD, model=record_model(), intent_checks=True)
     first, second = run(replay), run(replay)
     problems = [] if first == second else ["two replays of the same record disagree"]
     problems += compare(off, first)
