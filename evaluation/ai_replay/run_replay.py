@@ -13,10 +13,10 @@ Every scenario runs twice per mode in a fresh coordinator. The run fails if:
     add caution or verified findings), or
   * --check is given and the replay differs from expected.json.
 
-The committed record.jsonl was produced by the *scripted* provider below, a
-small rule-based stand-in, because no model credentials were available when
-it was generated. It exercises the plumbing and the safety properties, not
-model quality. Re-record with KAVACH_AI=live to capture real model answers.
+The committed record.jsonl was recorded from Groq (openai/gpt-oss-120b).
+The scripted provider below, a small rule-based stand-in, can re-record it
+without credentials (--record --scripted); that exercises the plumbing and
+the safety properties, not model quality.
 """
 
 from __future__ import annotations
@@ -152,6 +152,8 @@ def main(argv=None) -> int:
         else:
             os.environ["KAVACH_AI_RECORD"] = str(RECORD)
             os.environ["KAVACH_AI_INTENT"] = "on"
+            os.environ.setdefault("KAVACH_AI_RETRY_429", "5")    # wait out rate limits: a gap
+            os.environ.setdefault("KAVACH_AI_TIMEOUT", "300")   # in the record is lost evidence
             make = from_env
             if make().mode != "live":
                 print("set KAVACH_AI=live (and credentials) to record from the model", file=sys.stderr)

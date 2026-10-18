@@ -6,6 +6,10 @@ same task instructions and schemas as the Claude provider are used. The
 request asks for schema-constrained JSON; for models without that mode it
 retries once in plain JSON mode with the schema in the prompt. Either way
 kavach/ai/schema.py validates the answer locally before it is used.
+
+A rate-limited request (HTTP 429) gives no evidence. Offline recording sets
+KAVACH_AI_RETRY_429=<n> to wait out Retry-After up to n times instead; live
+checks leave it at 0 so a guard never stalls on the provider's rate limit.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, Optional
 
 import httpx
@@ -31,6 +36,7 @@ class GroqProvider:
         if not key:
             raise RuntimeError("GROQ_API_KEY is not set")
         self.model = model
+        self.retries_429 = int(os.environ.get("KAVACH_AI_RETRY_429", "0") or 0)
         self._client = httpx.Client(timeout=timeout, headers={"Authorization": f"Bearer {key}"})
 
     def complete(self, task: Task, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -50,11 +56,19 @@ class GroqProvider:
 
     def _post(self, messages, response_format):
         body = {"model": self.model, "temperature": 0, "messages": messages, "response_format": response_format}
-        try:
-            r = self._client.post(self.url, json=body)
-        except httpx.HTTPError as exc:
-            log.warning("Groq request failed (%s); no evidence", type(exc).__name__)
-            return None
+        for attempt in range(self.retries_429 + 1):
+            try:
+                r = self._client.post(self.url, json=body)
+            except httpx.HTTPError as exc:
+                log.warning("Groq request failed (%s); no evidence", type(exc).__name__)
+                return None
+            if r.status_code != 429 or attempt == self.retries_429:
+                break
+            try:
+                wait = float(r.headers.get("retry-after", 5))
+            except ValueError:
+                wait = 5.0
+            time.sleep(min(max(wait, 1.0), 60.0))
         if r.status_code == 400 and response_format["type"] == "json_schema":
             return "unsupported"
         if r.status_code != 200:

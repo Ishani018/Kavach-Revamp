@@ -549,8 +549,8 @@
             "POL-005"
           ],
           "VAULT": [
-            "ALLOW",
-            null
+            "ESCALATE",
+            "VAULT-AI-CANDIDATE:api_key"
           ]
         },
         "step": 0,
