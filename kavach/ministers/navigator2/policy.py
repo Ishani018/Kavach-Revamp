@@ -32,6 +32,9 @@ class PolicyFacts:
     untrusted_revision_fields: Dict[str, Any] = field(default_factory=dict)
     # Complete earlier session history from the append-only ledger.
     session_history: List[SessionEvent] = field(default_factory=list)
+    # Set only by an opt-in AI intent check (kavach/ai/intent.py) that judged
+    # this action outside the contract's goal. Used by POL-011.
+    intent_mismatch: bool = False
 
 
 class Policy:
@@ -299,6 +302,27 @@ class DelegationDepthPolicy(Policy):
         )
 
 
+class IntentMismatchPolicy(Policy):
+    """POL-011: AI intent evidence (opt-in) says this consequential action does
+    not fit the task the user stated. A model judgement is never enough to
+    block, so this only escalates for review; without the opt-in the fact is
+    always False and the policy never fires."""
+
+    id = "POL-011"
+    version = "1.0.0"
+    title = "action-outside-stated-task"
+
+    def evaluate(self, facts: PolicyFacts) -> Optional[PolicyDecision]:
+        if not facts.intent_mismatch:
+            return None
+        claims = [e.claim for e in facts.evidence if e.module == "ai_intent"]
+        return PolicyDecision(
+            policy_id=self.id, policy_version=self.version, verdict="escalate",
+            reason="AI intent evidence judged this action outside the stated task: " + "; ".join(claims),
+            evidence_refs=claims, event_ids=[facts.event.event_id],
+        )
+
+
 DEFAULT_POLICIES: List[Policy] = [
     ProvenanceExfilPolicy(),
     ContractScopePolicy(),
@@ -310,6 +334,7 @@ DEFAULT_POLICIES: List[Policy] = [
     CrossCallSensitiveReadThenSendPolicy(),
     InsufficientEvidenceCoveragePolicy(),
     DelegationDepthPolicy(),
+    IntentMismatchPolicy(),
 ]
 
 

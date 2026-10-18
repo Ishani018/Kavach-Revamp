@@ -59,7 +59,7 @@ class _Stats:
 class AIEvidence:
     def __init__(self, mode: str = "off", provider: Optional[Provider] = None,
                  record_path: Optional[Path] = None, timeout: float = 4.0,
-                 model: str = DEFAULT_MODEL) -> None:
+                 model: str = DEFAULT_MODEL, intent_checks: bool = False) -> None:
         if mode not in MODES:
             raise ValueError(f"KAVACH_AI must be one of {MODES}")
         if mode == "live" and provider is None:
@@ -68,6 +68,9 @@ class AIEvidence:
         self.provider = provider
         self.model = provider.model if provider is not None else model
         self.timeout = timeout
+        # Per-action "does this fit the user's task?" checks (NAVIGATOR POL-011).
+        # Separate opt-in: they add a model question to most consequential calls.
+        self.intent_checks = intent_checks and mode != "off"
         self.record_path = Path(record_path) if record_path else None
         self.stats = _Stats()
         self._cache: Dict[str, Dict[str, Any]] = {}
@@ -174,11 +177,13 @@ def from_env(provider_factory: Optional[Callable[[str, float], Provider]] = None
         timeout = float(os.environ.get("KAVACH_AI_TIMEOUT", "4"))
     except ValueError:
         timeout = 4.0
+    intent = os.environ.get("KAVACH_AI_INTENT", "off").strip().lower() in ("1", "on", "true", "yes")
     if mode not in MODES:
         log.error("KAVACH_AI=%r is not one of %s; AI evidence is off", mode, MODES)
         return AIEvidence("off")
     if mode != "live":
-        return AIEvidence(mode, record_path=Path(record) if record else None, timeout=timeout, model=model)
+        return AIEvidence(mode, record_path=Path(record) if record else None, timeout=timeout, model=model,
+                          intent_checks=intent)
     try:
         if provider_factory is None:
             from .anthropic_provider import AnthropicProvider
@@ -187,4 +192,5 @@ def from_env(provider_factory: Optional[Callable[[str, float], Provider]] = None
     except Exception as exc:
         log.error("KAVACH_AI=live but no AI provider could start (%s); AI evidence is off", type(exc).__name__)
         return AIEvidence("off")
-    return AIEvidence("live", provider=provider, record_path=Path(record) if record else None, timeout=timeout)
+    return AIEvidence("live", provider=provider, record_path=Path(record) if record else None, timeout=timeout,
+                      intent_checks=intent)

@@ -33,6 +33,7 @@ _RULES = {
     "POL-008": ("block", "The task contract explicitly denies this tool category."),
     "POL-009": ("block", "A prior permitted action touched a sensitive artifact and this action transmits to an unauthorized destination."),
     "POL-010": ("escalate", "The action comes from an agent nested deeper than the task contract allows."),
+    "POL-011": ("escalate", "Opt-in AI intent evidence judged this action outside the task the user stated."),
 }
 
 
@@ -128,6 +129,7 @@ class InvariantPolicyEngine:
             ),
             "__kavach_explicitly_denied": event.tool_name in contract.denied_categories,
             "__kavach_delegation_too_deep": event.agent_depth > contract.max_agent_depth,
+            "__kavach_intent_mismatch": facts.intent_mismatch,
         }
 
     @staticmethod

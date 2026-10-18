@@ -23,7 +23,8 @@ const POLICY_EXPLANATIONS = {
   'POL-007': 'Evidence coverage is incomplete. This is uncertainty, not by itself proof of malicious intent.',
   'POL-008': 'The requested tool category is explicitly denied by the task contract.',
   'POL-009': 'The session previously touched sensitive data and now proposes sending it to an unapproved destination.',
-  'POL-010': 'The action comes from a sub-agent nested deeper than the task allows, so it needs review.'
+  'POL-010': 'The action comes from a sub-agent nested deeper than the task allows, so it needs review.',
+  'POL-011': 'Opt-in AI intent evidence judged this action outside the task you gave, so it needs review.'
 };
 
 function explainRuleId(id) {

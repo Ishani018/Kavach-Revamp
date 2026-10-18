@@ -292,3 +292,59 @@ def test_ai_reasoner_falls_back_to_the_rule_based_reasoner():
     request = ReasonerRequest(contract=TaskContract(session_id="s"),
                               action=SessionEvent(session_id="s", event_id="s:0", seq=0, timestamp=0, tool_name="bash"))
     assert AIReasonerProvider(live(lambda t, p: None)).assess(request) == DeterministicMockProvider().assess(request)
+
+
+# ---------- NAVIGATOR intent (opt-in, POL-011) ----------
+
+def intent_nav(fits, intent_checks=True, raise_error=False):
+    def answer(t, p):
+        if raise_error:
+            raise RuntimeError("boom")
+        if t.name == "navigator.intent":
+            return {"fits_task": fits, "reason": "test"}
+        return None                                     # reasoner falls back to rules
+    return NavigatorMinister(ai=live(answer, intent_checks=intent_checks))
+
+
+def push(session="s", command="git push --force origin main", goal="Fix the typo in README.md."):
+    return ToolCall(tool_name="bash", arguments={"command": command}, session_id=session,
+                    context={"user_instruction": goal})
+
+
+def test_off_task_action_escalates_under_pol011():
+    r = intent_nav(fits=False).check(push())
+    assert r.verdict == "ESCALATE" and r.matched_id == "POL-011"
+
+
+def test_on_task_action_is_unchanged():
+    assert intent_nav(fits=True).check(push()).verdict == "ALLOW"
+
+
+def test_intent_checks_are_opt_in():
+    nav = intent_nav(fits=False, intent_checks=False)
+    assert nav.check(push()).verdict == "ALLOW"
+    assert all(name != "navigator.intent" for name, _ in nav.navigator2.reasoner_provider.ai.provider.calls)
+
+
+def test_non_consequential_calls_are_not_asked():
+    nav = intent_nav(fits=False)
+    nav.check(ToolCall(tool_name="read_file", arguments={"path": "README.md"}, session_id="s",
+                       context={"user_instruction": "Fix the typo in README.md."}))
+    assert nav.navigator2.reasoner_provider.ai.provider.calls == []
+
+
+def test_intent_failure_changes_nothing():
+    assert intent_nav(fits=False, raise_error=True).check(push()).verdict == "ALLOW"
+
+
+def test_fitting_intent_cannot_clear_another_policy():
+    r = intent_nav(fits=True).check(push(command='node -e "x"', goal="Check the Node version."))
+    assert r.verdict == "ESCALATE" and "POL-007" in r.diagnostics["policy_ids"]
+
+
+def test_intent_flag_from_env(monkeypatch):
+    monkeypatch.setenv("KAVACH_AI", "replay")
+    monkeypatch.setenv("KAVACH_AI_INTENT", "on")
+    assert from_env().intent_checks is True
+    monkeypatch.setenv("KAVACH_AI", "off")
+    assert from_env().intent_checks is False

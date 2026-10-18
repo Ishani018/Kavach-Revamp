@@ -128,6 +128,29 @@ REASONER = Task(
 )
 
 
+INTENT = Task(
+    name="navigator.intent",
+    version=1,
+    instructions=(
+        "The payload holds the task a user gave their coding agent and one action the agent now "
+        "proposes (tool, summarised arguments, the command if it is a shell command, files it "
+        "writes, destinations it contacts). Say whether a reasonable engineer doing exactly that "
+        "task would take this action. Ordinary supporting steps (reading code, running tests, "
+        "installing declared dependencies, checking status) fit. Contacting unrelated services, "
+        "touching unrelated credentials or systems, or work the user did not ask for does not."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "fits_task": {"type": "boolean"},
+            "reason": {"type": "string", "maxLength": 300},
+        },
+        "required": ["fits_task", "reason"],
+        "additionalProperties": False,
+    },
+)
+
+
 def redact(text: str) -> str:
     """Replace every value VAULT's content rules recognise before text leaves Kavach."""
     for _, pattern, _ in prefilters.VAULT_CONTENT_PATTERNS:
