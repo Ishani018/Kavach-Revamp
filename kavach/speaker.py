@@ -76,4 +76,6 @@ def decide(results: Iterable[Any], required: Tuple[str, ...] = MINISTER_NAMES) -
     if problems:
         return SpeakerVerdict("ESCALATE", "Speaker", "incomplete minister results, failing closed: " + "; ".join(problems))
 
-    return SpeakerVerdict("ALLOW", "Speaker", "all four ministers returned ALLOW")
+    if tuple(required) == MINISTER_NAMES:
+        return SpeakerVerdict("ALLOW", "Speaker", "all four ministers returned ALLOW")
+    return SpeakerVerdict("ALLOW", "Speaker", f"{', '.join(required)} returned ALLOW")

@@ -546,6 +546,43 @@ def primitive_of(rule_name: str, minister: str) -> str:
     return RULE_PRIMITIVE.get(rule_name, "V0" if minister == "VAULT" else "E0")
 
 
+# Secret VALUES in free text (a user prompt or a tool's output), as opposed to
+# VAULT_PATTERNS above, which mostly match ACCESS intent (credential paths,
+# dump commands). Running the access rules over output would fire on any
+# listing or doc that merely mentions ~/.ssh, so content scanning uses only
+# value-shaped rules. Each needs a distinctive prefix or structure; no
+# entropy guessing.
+VAULT_CONTENT_PATTERNS: list[tuple[str, re.Pattern, str]] = [
+    ("aws-access-key-id", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "MITRE ATT&CK T1552.001"),
+    ("aws-secret-access-key",
+     re.compile(r"aws_secret_access_key\s*[=:]\s*['\"]?[A-Za-z0-9/+]{40}\b", re.IGNORECASE),
+     "MITRE ATT&CK T1552.001"),
+    ("private-key-block",
+     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----"),
+     "MITRE ATT&CK T1552.004"),
+    ("github-token",
+     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,})\b"),
+     "MITRE ATT&CK T1552.001"),
+    ("gitlab-token", re.compile(r"\bglpat-[A-Za-z0-9_-]{20}\b"), "MITRE ATT&CK T1552.001"),
+    ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b"), "MITRE ATT&CK T1552.001"),
+    ("stripe-secret-key", re.compile(r"\b[sr]k_live_[A-Za-z0-9]{20,}\b"), "MITRE ATT&CK T1552.001"),
+    ("llm-provider-api-key", re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}"), "MITRE ATT&CK T1552.001"),
+    ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"), "MITRE ATT&CK T1552.001"),
+    ("npm-access-token", re.compile(r"\bnpm_[A-Za-z0-9]{36}\b"), "MITRE ATT&CK T1552.001"),
+    ("database-url-with-password",
+     re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:@/'\"]+:[^\s@/'\"]+@"),
+     "MITRE ATT&CK T1552.001"),
+]
+
+
+def scan_vault_content(text: str) -> list[tuple[str, str]]:
+    """Names and sources of every content rule matching `text`, in rule order.
+    Never returns the matched value itself."""
+    if not isinstance(text, str) or not text:
+        return []
+    return [(name, source) for name, pattern, source in VAULT_CONTENT_PATTERNS if pattern.search(text)]
+
+
 def check_vault(call: ParsedCall) -> MinisterScan | None:
     values = _flatten_arg_values(call.args)
     haystacks = [call.tool] + values

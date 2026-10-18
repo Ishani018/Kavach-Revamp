@@ -19,8 +19,9 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .agents import AgentLinkError
 from .coordinator import Coordinator
-from .schemas import MINISTER_NAMES, Decision, ToolCall
+from .schemas import MINISTER_NAMES, Decision, Observation, ObservationDecision, ToolCall
 
 log = logging.getLogger("kavach.api")
 WEB_INDEX = Path(__file__).resolve().parents[1] / "web" / "index.html"
@@ -45,7 +46,15 @@ def build_default_coordinator() -> Coordinator:
     from .ministers.navigator import NavigatorMinister
     from .ministers.vault import VaultMinister
 
-    return Coordinator([VaultMinister(), ExecutorMinister(), ChannelMinister(), NavigatorMinister()])
+    from .ai import from_env
+
+    ai = from_env()
+    if ai.enabled:
+        log.info("AI evidence is %s (model %s)", ai.mode, ai.model)
+    coordinator = Coordinator([VaultMinister(ai=ai), ExecutorMinister(ai=ai), ChannelMinister(ai=ai),
+                               NavigatorMinister(ai=ai)])
+    coordinator.ai = ai
+    return coordinator
 
 
 def _dashboard_auth_configured() -> bool:
@@ -125,7 +134,9 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok", "ministers": list(MINISTER_NAMES)}
+        ai = getattr(state["coordinator"], "ai", None)
+        return {"status": "ok", "ministers": list(MINISTER_NAMES),
+                "ai_evidence": ai.mode if ai is not None else "off"}
 
     @app.get("/api/session")
     def session_status(request: Request) -> dict[str, bool]:
@@ -274,7 +285,14 @@ def create_app(coordinator: Optional[Coordinator] = None) -> FastAPI:
     def check(call: ToolCall) -> Decision:
         return state["coordinator"].evaluate(call)
 
+    def observe(obs: Observation) -> ObservationDecision:
+        try:
+            return state["coordinator"].observe(obs)
+        except AgentLinkError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+
     app.post("/check", response_model=Decision)(check)
+    app.post("/observe", response_model=ObservationDecision)(observe)
     app.post("/hook/parliament", response_model=Decision, include_in_schema=False)(check)
     return app
 

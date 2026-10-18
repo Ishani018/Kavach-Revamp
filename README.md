@@ -18,15 +18,22 @@ This is the extracted working core of the research project. NAVIGATOR runtime wo
 ## Request flow
 
 ```
-POST /check {tool_name, arguments, session_id}
+POST /check {tool_name, arguments, session_id, agent_id?}
   → validate (schemas.ToolCall)
-  → VAULT, EXECUTOR, CHANNEL, NAVIGATOR   (always all four, sequentially, no routing)
+  → resolve the agent's tree (domain); serialize within that domain
+  → VAULT, EXECUTOR, CHANNEL in parallel, then NAVIGATOR with their results   (always all four, no routing)
   → a minister that raises or returns a malformed result is recorded as ESCALATE
   → Speaker.decide()
   → {verdict, reason, decided_by, ministers: {name: {verdict, reason, matched_id, confidence, diagnostics}}}
 ```
 
 Speaker policy: any BLOCK → BLOCK; else any ESCALATE → ESCALATE; else any missing/duplicate/unexpected/malformed result → ESCALATE; ALLOW only when all four ministers returned a valid ALLOW. Confidence ties resolve by fixed minister order.
+
+`POST /observe {event, session_id, text, tool_name?, arguments?}` handles hook events that report something that already happened: `UserPromptSubmit` (the prompt) and `PostToolUse` (a tool's output). Ministers that implement `observe()` (VAULT, CHANNEL, NAVIGATOR) inspect the text and update session state, in the same fixed order; the Speaker combines only the ministers that reported. See [prompt and tool-output inspection](docs/vscode-pretool-enforcement.md#prompt-and-tool-output-inspection).
+
+Every call and observation is attributed to an agent and resolved to its agent tree (`kavach/agents.py`); ministers keep state per tree, so parent and sub-agents share taint, provenance and NAVIGATOR's contract. Lifecycle events (`SessionStart`, `SubagentStart`, `SubagentStop`, `PreCompact`, `Stop`) also go to `/observe`. See [every hook, and agents that start agents](docs/vscode-pretool-enforcement.md#every-hook-and-agents-that-start-agents).
+
+**AI evidence (off by default).** Ministers can ask a model for evidence that code verifies or that can only add caution: decoding obfuscated commands (EXECUTOR), the role of an unknown tool (CHANNEL), whether an unrecognised token is a credential (VAULT), and an explanation for flagged actions (NAVIGATOR). Answers are recorded and replayable, so verdicts stay deterministic. See [AI evidence](docs/ai-evidence.md).
 
 Secrets matched by VAULT are never echoed in results or logs. Exception messages from ministers are not copied into responses.
 
@@ -75,7 +82,7 @@ The VS Code extension now contributes a language-model tool (`#kavachPreflight`)
 
 ## VS Code pre-execution integration
 
-The first runtime adapter targets VS Code's **Local agent harness**. It registers a `PreToolUse` hook that calls the local Kavach API before tool execution and maps `ALLOW` → allow, `BLOCK` → deny, and `ESCALATE` → deny (fail-closed until the native approval prompt is verified). In a live VS Code 1.141.0 Local test, a tool executed after an `ask` result without a confirmation prompt, so this adapter does not rely on `ask` for security. API failures, malformed decisions, missing stable session IDs, and audit failures also deny the call. It stores the latest user prompt locally for same-session context and writes a private audit log without raw tool arguments. Each tool check also emits a user-visible `KAVACH PRE-TOOL REVIEW` message containing the final policy verdict, each minister's verdict, any rule/policy IDs, and a privacy-safe explanation; the same report is added as model context so the agent can explain the decision. Command excerpts, secret values, and destination strings are withheld from the report.
+The first runtime adapter targets VS Code's **Local agent harness**. It registers a `PreToolUse` hook that calls the local Kavach API before tool execution and maps `ALLOW` → allow, `BLOCK` → deny, and `ESCALATE` → deny (fail-closed until the native approval prompt is verified). In a live VS Code 1.141.0 Local test, a tool executed after an `ask` result without a confirmation prompt, so this adapter does not rely on `ask` for security. API failures, malformed decisions, missing stable session IDs, and audit failures also deny the call. It stores the latest user prompt locally for same-session context and writes a private audit log without raw tool arguments. The `UserPromptSubmit` and `PostToolUse` hooks send the prompt and each tool's output to `/observe`: a secret in a prompt stops it before the model sees it, and a secret in a tool's output warns the agent and marks the session so a later send to an unverified destination is blocked. Each tool check also emits a user-visible `KAVACH PRE-TOOL REVIEW` message containing the final policy verdict, each minister's verdict, any rule/policy IDs, and a privacy-safe explanation; the same report is added as model context so the agent can explain the decision. Command excerpts, secret values, and destination strings are withheld from the report.
 
 This integration is a starting point, not a claim of universal agent protection. VS Code hooks are in Preview and this hook does not apply automatically to Cloud, Agent Host, external apps, or arbitrary MCP servers. Follow [the installation and validation guide](docs/vscode-pretool-enforcement.md). The CI adapter tests validate the hook contract; before relying on it, perform the documented live Local-harness test and verify that a blocked side effect never occurs.
 

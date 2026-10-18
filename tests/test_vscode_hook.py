@@ -17,17 +17,26 @@ HOOK = ROOT / "scripts" / "kavach_vscode_hook.py"
 
 
 @contextmanager
-def fake_kavach_api(result: dict[str, Any]) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+def fake_kavach_api(
+    result: dict[str, Any],
+    observe_result: dict[str, Any] | None = None,
+    observed: list[dict[str, Any]] | None = None,
+) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+    """`received` collects /check bodies; pass `observed` to collect /observe bodies."""
     received: list[dict[str, Any]] = []
+    observed = observed if observed is not None else []
+    observe_reply = observe_result or observation_result("ALLOW")
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
-            if self.path != "/check":
+            if self.path not in {"/check", "/observe"}:
                 self.send_error(404)
                 return
             size = int(self.headers.get("content-length", "0"))
-            received.append(json.loads(self.rfile.read(size).decode("utf-8")))
-            body = json.dumps(result).encode("utf-8")
+            payload = json.loads(self.rfile.read(size).decode("utf-8"))
+            (received if self.path == "/check" else observed).append(payload)
+            reply = result if self.path == "/check" else observe_reply
+            body = json.dumps(reply).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -106,6 +115,31 @@ def pretool_event(
         "tool_use_id": "tool-use-01",
         "tool_name": tool_name,
         "tool_input": tool_input if tool_input is not None else {"command": "echo PRIVATE_ARG_SHOULD_NOT_PERSIST"},
+    }
+
+
+def observation_result(verdict: str, event: str = "PostToolUse") -> dict[str, Any]:
+    """An /observe reply: only the ministers that reported are present."""
+    if verdict == "ALLOW":
+        ministers = {"VAULT": {"verdict": "ALLOW", "matched_id": None,
+                               "reason": "VAULT: no secret value found", "diagnostics": {}}}
+    elif verdict == "BLOCK":
+        ministers = {
+            "VAULT": {"verdict": "BLOCK", "matched_id": "VAULT-CONTENT:aws-access-key-id",
+                      "reason": "VAULT found secret material (match text withheld)", "diagnostics": {}},
+            "CHANNEL": {"verdict": "ALLOW", "matched_id": "CHANNEL-TAINT-SOURCE:secret-in-output",
+                        "reason": "CHANNEL tainted the session", "diagnostics": {}},
+        }
+    else:
+        ministers = {"VAULT": {"verdict": "ESCALATE", "matched_id": "VAULT-FAILURE",
+                               "reason": "VAULT unavailable; failing closed", "diagnostics": {}}}
+    return {
+        "event": event,
+        "verdict": verdict,
+        "reason": "Controlled observation verdict.",
+        "decided_by": "VAULT" if verdict != "ALLOW" else "Speaker",
+        "session_id": "vscode-session-01",
+        "ministers": ministers,
     }
 
 
@@ -344,7 +378,10 @@ def test_audit_does_not_persist_raw_tool_arguments_or_prompt(tmp_path: Path) -> 
     contents = audit.read_text(encoding="utf-8")
     assert "PRIVATE_ARG_SHOULD_NOT_PERSIST" not in contents
     assert "PRIVATE_PROMPT_SHOULD_NOT_PERSIST_IN_AUDIT" not in contents
-    record = json.loads(contents.splitlines()[0])
+    records = [json.loads(line) for line in contents.splitlines()]
+    assert [r["hook_event"] for r in records] == ["UserPromptSubmit", "PreToolUse"]
+    assert records[0]["observed_chars"] == len("PRIVATE_PROMPT_SHOULD_NOT_PERSIST_IN_AUDIT")
+    record = records[1]
     assert record["verdict"] == "ALLOW"
     assert record["call_fingerprint"]
     assert record["tool_name"] == "runInTerminal"
@@ -353,30 +390,31 @@ def test_audit_does_not_persist_raw_tool_arguments_or_prompt(tmp_path: Path) -> 
 
 
 def test_post_tool_use_records_execution_without_output_contents(tmp_path: Path) -> None:
-    env = os.environ.copy()
-    env["KAVACH_VSCODE_HOME"] = str(tmp_path / "kavach-home")
-    env["KAVACH_LOCAL_API_URL"] = "http://127.0.0.1:1"  # must not be called for post hooks
+    observed: list[dict[str, Any]] = []
     event = pretool_event()
     event.update({
         "hook_event_name": "PostToolUse",
         "tool_response": "PRIVATE_OUTPUT_SHOULD_NOT_PERSIST",
     })
-    proc = subprocess.run(
-        [sys.executable, str(HOOK)],
-        input=json.dumps(event),
-        text=True,
-        capture_output=True,
-        cwd=ROOT,
-        env=env,
-        timeout=10,
-        check=False,
-    )
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout) == {"continue": True}
+    with fake_kavach_api(api_result("ALLOW"), observed=observed) as (url, received):
+        output = run_hook(event, tmp_path, url)
+
+    assert output == {"continue": True}
+    assert received == []
+    assert observed == [{
+        "event": "PostToolUse",
+        "session_id": "vscode-session-01",
+        "tool_name": "runInTerminal",
+        "arguments": {"command": "echo PRIVATE_ARG_SHOULD_NOT_PERSIST"},
+        "text": "PRIVATE_OUTPUT_SHOULD_NOT_PERSIST",
+    }]
     audit = tmp_path / "kavach-home" / "events.jsonl"
     contents = audit.read_text(encoding="utf-8")
-    assert "EXECUTED" in contents
+    record = json.loads(contents.splitlines()[0])
+    assert record["execution"] == "completed"
+    assert record["verdict"] == "ALLOW"
     assert "PRIVATE_OUTPUT_SHOULD_NOT_PERSIST" not in contents
+    assert "PRIVATE_ARG_SHOULD_NOT_PERSIST" not in contents
 
 
 def test_api_redirect_is_not_followed_to_another_host(tmp_path: Path) -> None:
@@ -400,3 +438,202 @@ def test_unknown_hook_event_does_not_implicitly_continue(tmp_path: Path) -> None
     output = run_hook({"session_id": "vscode-session-01", "prompt": "ignored"}, tmp_path, "http://127.0.0.1:1")
     assert decision(output) == "deny"
     assert "missing or unsupported" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+SECRET_OUTPUT = "config loaded\nkey=AKIAIOSFODNN7ABCDEFG\n"
+
+
+def post_tool_event(output: Any = SECRET_OUTPUT) -> dict[str, Any]:
+    event = pretool_event()
+    event.update({"hook_event_name": "PostToolUse", "tool_response": output})
+    return event
+
+
+def test_prompt_is_observed_and_allowed(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), observed=observed) as (url, _):
+        output = run_hook(
+            {"hook_event_name": "UserPromptSubmit", "session_id": "vscode-session-01",
+             "prompt": "Run the unit tests."},
+            tmp_path, url,
+        )
+    assert output == {"continue": True}
+    assert observed == [{"event": "UserPromptSubmit", "session_id": "vscode-session-01",
+                         "text": "Run the unit tests."}]
+
+
+def test_prompt_with_secret_is_blocked_before_reaching_the_model(tmp_path: Path) -> None:
+    with fake_kavach_api(api_result("ALLOW"), observation_result("BLOCK", "UserPromptSubmit")) as (url, _):
+        output = run_hook(
+            {"hook_event_name": "UserPromptSubmit", "session_id": "vscode-session-01",
+             "prompt": "use key AKIAIOSFODNN7ABCDEFG to deploy"},
+            tmp_path, url,
+        )
+    assert output["decision"] == "block"
+    assert output["continue"] is False
+    assert "VAULT-CONTENT:aws-access-key-id" in output["systemMessage"]
+    assert "AKIAIOSFODNN7ABCDEFG" not in json.dumps(output)
+    contents = (tmp_path / "kavach-home" / "events.jsonl").read_text(encoding="utf-8")
+    assert "AKIAIOSFODNN7ABCDEFG" not in contents
+    contexts = tmp_path / "kavach-home" / "contexts"
+    assert not contexts.exists() or not any(contexts.iterdir())
+
+
+def test_prompt_is_not_blocked_when_kavach_is_unavailable(tmp_path: Path) -> None:
+    output = run_hook(
+        {"hook_event_name": "UserPromptSubmit", "session_id": "vscode-session-01", "prompt": "hello"},
+        tmp_path, "http://127.0.0.1:1",
+    )
+    assert output["continue"] is True
+    assert "not inspected" in output["systemMessage"]
+
+
+def test_secret_in_tool_output_warns_the_model_without_echoing_it(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), observation_result("BLOCK"), observed) as (url, _):
+        output = run_hook(post_tool_event(), tmp_path, url)
+    assert observed[0]["text"] == SECRET_OUTPUT
+    assert output["decision"] == "block"
+    assert "Do not repeat" in output["reason"]
+    assert output["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    assert "VAULT-CONTENT:aws-access-key-id" in output["hookSpecificOutput"]["additionalContext"]
+    assert "AKIAIOSFODNN7ABCDEFG" not in json.dumps(output)
+    contents = (tmp_path / "kavach-home" / "events.jsonl").read_text(encoding="utf-8")
+    assert "AKIAIOSFODNN7ABCDEFG" not in contents
+    assert json.loads(contents.splitlines()[0])["verdict"] == "BLOCK"
+
+
+def test_structured_tool_output_is_serialized_for_inspection(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), observed=observed) as (url, _):
+        run_hook(post_tool_event({"stdout": "ok", "exit_code": 0}), tmp_path, url)
+    assert json.loads(observed[0]["text"]) == {"stdout": "ok", "exit_code": 0}
+
+
+def test_post_tool_use_reports_uninspected_output_when_kavach_is_unavailable(tmp_path: Path) -> None:
+    output = run_hook(post_tool_event(), tmp_path, "http://127.0.0.1:1")
+    assert output["continue"] is True
+    assert "output was not inspected" in output["systemMessage"]
+    record = json.loads((tmp_path / "kavach-home" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert record["verdict"] == "ERROR"
+
+
+@pytest.mark.parametrize("bad", [
+    {"verdict": "ALLOW", "ministers": {"VAULT": {"verdict": "BLOCK"}}},
+    {"verdict": "ALLOW", "ministers": {"ROGUE": {"verdict": "ALLOW"}}},
+    {"verdict": "MAYBE", "ministers": {}},
+])
+def test_inconsistent_observation_is_not_trusted(tmp_path: Path, bad: dict[str, Any]) -> None:
+    with fake_kavach_api(api_result("ALLOW"), bad) as (url, _):
+        output = run_hook(post_tool_event(), tmp_path, url)
+    assert "output was not inspected" in output["systemMessage"]
+
+
+# ---------- agent attribution and lifecycle hooks ----------
+
+def lifecycle_reply(summary: dict[str, Any] | None = None, event: str = "SessionStart") -> dict[str, Any]:
+    return {
+        "event": event, "verdict": "ALLOW", "reason": "no minister reported", "decided_by": "Speaker",
+        "session_id": "vscode-session-01", "ministers": {},
+        "summary": summary or {"domain_id": "vscode-session-01", "agents": 1, "checks": 0, "blocked": 0,
+                               "escalated": 0, "secret_observations": 0, "holds_sensitive_data": False,
+                               "recent_denials": []},
+    }
+
+
+def test_subagent_tool_calls_carry_agent_attribution(tmp_path: Path) -> None:
+    event = pretool_event()
+    event.update({"agent_id": "agent-7", "agent_type": "Explore"})
+    with fake_kavach_api(api_result("ALLOW")) as (url, received):
+        run_hook(event, tmp_path, url)
+    assert received[0]["agent_id"] == "agent-7" and received[0]["agent_type"] == "Explore"
+    record = json.loads((tmp_path / "kavach-home" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert record["agent_hash"] and "agent-7" not in json.dumps(record)
+
+
+def test_session_start_announces_protection(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(), observed) as (url, _):
+        output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01",
+                           "source": "startup"}, tmp_path, url)
+    assert observed == [{"event": "SessionStart", "session_id": "vscode-session-01"}]
+    ctx = output["hookSpecificOutput"]
+    assert ctx["hookEventName"] == "SessionStart"
+    assert ctx["additionalContext"].startswith("KAVACH ACTIVE")
+
+
+def test_session_start_never_claims_protection_when_kavach_is_down(tmp_path: Path) -> None:
+    output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01"},
+                      tmp_path, "http://127.0.0.1:1")
+    text = output["hookSpecificOutput"]["additionalContext"]
+    assert text.startswith("KAVACH UNAVAILABLE") and "denied" in text
+
+
+def test_resumed_session_gets_prior_denials_back_without_inputs(tmp_path: Path) -> None:
+    summary = {"domain_id": "vscode-session-01", "agents": 2, "checks": 4, "blocked": 1, "escalated": 0,
+               "secret_observations": 1, "holds_sensitive_data": True,
+               "recent_denials": [{"tool": "runInTerminal", "verdict": "BLOCK", "decided_by": "EXECUTOR",
+                                   "rules": ["EXECUTOR-PREFILTER:curl-pipe-shell"]}]}
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(summary)) as (url, _):
+        output = run_hook({"hook_event_name": "SessionStart", "session_id": "vscode-session-01",
+                           "source": "compact"}, tmp_path, url)
+    text = output["hookSpecificOutput"]["additionalContext"]
+    assert "1 blocked" in text and "do not retry" in text
+    assert "EXECUTOR-PREFILTER:curl-pipe-shell" in text
+    assert "sensitive data" in text
+
+
+def test_subagent_start_injects_shared_state_context(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(event="SubagentStart"), observed) as (url, _):
+        output = run_hook({"hook_event_name": "SubagentStart", "session_id": "vscode-session-01",
+                           "agent_id": "agent-7", "agent_type": "Explore"}, tmp_path, url)
+    assert observed[0] == {"event": "SubagentStart", "session_id": "vscode-session-01",
+                           "agent_id": "agent-7", "agent_type": "Explore"}
+    assert output["hookSpecificOutput"]["hookEventName"] == "SubagentStart"
+    assert "sub-agent" in output["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.parametrize("name", ["SubagentStop", "Stop"])
+def test_secret_in_report_or_answer_sends_the_agent_back_once(tmp_path: Path, name: str) -> None:
+    observed: list[dict[str, Any]] = []
+    event = {"hook_event_name": name, "session_id": "vscode-session-01", "agent_id": "agent-7",
+             "last_assistant_message": SECRET_OUTPUT, "stop_hook_active": False}
+    with fake_kavach_api(api_result("ALLOW"), observation_result("BLOCK", name), observed) as (url, _):
+        first = run_hook(event, tmp_path, url)
+        event["stop_hook_active"] = True
+        second = run_hook(event, tmp_path, url)
+    assert observed[0]["event"] == name and observed[0]["text"] == SECRET_OUTPUT
+    assert first["decision"] == "block" and "Rewrite it without the secret" in first["reason"]
+    assert "decision" not in second and second["continue"] is True    # no loop
+    assert "AKIAIOSFODNN7ABCDEFG" not in json.dumps(first) + json.dumps(second)
+
+
+def test_clean_final_answer_continues(tmp_path: Path) -> None:
+    with fake_kavach_api(api_result("ALLOW")) as (url, _):
+        output = run_hook({"hook_event_name": "Stop", "session_id": "vscode-session-01",
+                           "last_assistant_message": "All tests pass."}, tmp_path, url)
+    assert output == {"continue": True}
+
+
+def test_pre_compact_is_recorded_and_never_blocks(tmp_path: Path) -> None:
+    observed: list[dict[str, Any]] = []
+    with fake_kavach_api(api_result("ALLOW"), lifecycle_reply(event="PreCompact"), observed) as (url, _):
+        output = run_hook({"hook_event_name": "PreCompact", "session_id": "vscode-session-01",
+                           "trigger": "auto"}, tmp_path, url)
+    assert output == {"continue": True}
+    assert observed[0]["event"] == "PreCompact"
+
+
+def test_hook_config_registers_every_supported_event() -> None:
+    config = json.loads((ROOT / ".github" / "hooks" / "kavach.json").read_text(encoding="utf-8"))
+    assert set(config["hooks"]) == {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                                    "SubagentStart", "SubagentStop", "PreCompact", "Stop"}
+
+
+def test_escalated_prompt_continues_with_a_caution(tmp_path: Path) -> None:
+    reply = observation_result("ESCALATE", "UserPromptSubmit")
+    with fake_kavach_api(api_result("ALLOW"), reply) as (url, _):
+        output = run_hook({"hook_event_name": "UserPromptSubmit", "session_id": "vscode-session-01",
+                           "prompt": "use DB_PASSWORD=hunter2hunter2"}, tmp_path, url)
+    assert output["continue"] is True and "may contain a credential" in output["systemMessage"]
