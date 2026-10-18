@@ -12,7 +12,8 @@ const POLICY_TITLES = {
   'POL-006': 'high-impact-without-approval',
   'POL-007': 'insufficient-evidence-coverage',
   'POL-008': 'explicit-task-restriction-violation',
-  'POL-009': 'prior-sensitive-artifact-to-unauthorized-destination'
+  'POL-009': 'prior-sensitive-artifact-to-unauthorized-destination',
+  'POL-010': 'delegation-depth-exceeded'
 };
 
 function validateDecision(value) {

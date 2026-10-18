@@ -276,6 +276,29 @@ class CrossCallSensitiveReadThenSendPolicy(Policy):
         )
 
 
+class DelegationDepthPolicy(Policy):
+    """POL-010: the call comes from an agent nested deeper in the agent tree
+    than the contract allows. Each delegation hop carries the task further
+    from the user's own instruction and multiplies what can act on it, so a
+    deep agent's actions are reviewed rather than trusted by default. The depth
+    comes from Kavach's agent registry, never from the caller."""
+
+    id = "POL-010"
+    version = "1.0.0"
+    title = "delegation-depth-exceeded"
+
+    def evaluate(self, facts: PolicyFacts) -> Optional[PolicyDecision]:
+        if facts.event.agent_depth <= facts.contract.max_agent_depth:
+            return None
+        return PolicyDecision(
+            policy_id=self.id, policy_version=self.version, verdict="escalate",
+            reason=(f"agent at delegation depth {facts.event.agent_depth} exceeds the contract's "
+                    f"limit of {facts.contract.max_agent_depth}"),
+            evidence_refs=[f"agent_depth={facts.event.agent_depth}", f"max_agent_depth={facts.contract.max_agent_depth}"],
+            event_ids=[facts.event.event_id],
+        )
+
+
 DEFAULT_POLICIES: List[Policy] = [
     ProvenanceExfilPolicy(),
     ContractScopePolicy(),
@@ -286,6 +309,7 @@ DEFAULT_POLICIES: List[Policy] = [
     ExplicitRestrictionPolicy(),
     CrossCallSensitiveReadThenSendPolicy(),
     InsufficientEvidenceCoveragePolicy(),
+    DelegationDepthPolicy(),
 ]
 
 

@@ -119,6 +119,7 @@ def test_every_task_schema_is_checkable_and_strict():
 # ---------- Claude provider request shape ----------
 
 def test_provider_request_shape_and_refusal(monkeypatch):
+    pytest.importorskip("anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-used")
     provider = AnthropicProvider("claude-opus-5-5", 4.0)
     sent = {}

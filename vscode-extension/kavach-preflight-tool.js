@@ -22,7 +22,8 @@ const POLICY_EXPLANATIONS = {
   'POL-006': 'A contract-flagged high-impact action lacks a recorded approval event.',
   'POL-007': 'Evidence coverage is incomplete. This is uncertainty, not by itself proof of malicious intent.',
   'POL-008': 'The requested tool category is explicitly denied by the task contract.',
-  'POL-009': 'The session previously touched sensitive data and now proposes sending it to an unapproved destination.'
+  'POL-009': 'The session previously touched sensitive data and now proposes sending it to an unapproved destination.',
+  'POL-010': 'The action comes from a sub-agent nested deeper than the task allows, so it needs review.'
 };
 
 function explainRuleId(id) {

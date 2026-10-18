@@ -296,6 +296,7 @@ class Navigator2:
             integrity=tag.integrity, confidentiality=propagated_confidentiality,
             artifacts_read=reads, artifacts_written=writes, destinations=destinations,
             history_gap=history_gap, legacy_minister_results=dict(legacy_verdicts),
+            agent_depth=getattr(call, "agent_depth", 0),
         )
 
         untrusted_revision_attempted = False

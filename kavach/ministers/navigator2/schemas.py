@@ -13,6 +13,7 @@ below collapses them into a single trust/risk score.
 
 from __future__ import annotations
 
+import os
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -91,6 +92,13 @@ class ContractRevision(BaseModel):
     changed_fields: Dict[str, Any] = Field(default_factory=dict)
 
 
+def _default_max_agent_depth() -> int:
+    try:
+        return max(0, int(os.environ.get("KAVACH_MAX_AGENT_DEPTH", "3")))
+    except ValueError:
+        return 3
+
+
 class TaskContract(BaseModel):
     session_id: str
     version: int = 0
@@ -101,6 +109,9 @@ class TaskContract(BaseModel):
     approved_destinations: List[str] = Field(default_factory=list)
     high_impact_categories_requiring_approval: List[str] = Field(default_factory=list)
     unresolved_ambiguities: List[str] = Field(default_factory=list)
+    # Deepest agent-tree level allowed to act without review (0 = main agent
+    # only). POL-010 escalates calls from deeper agents.
+    max_agent_depth: int = Field(default_factory=_default_max_agent_depth, ge=0)
     created_from_event_id: Optional[str] = None
     history: List[ContractRevision] = Field(default_factory=list)
 
@@ -122,6 +133,7 @@ class SessionEvent(BaseModel):
     artifacts_written: List[str] = Field(default_factory=list)
     destinations: List[str] = Field(default_factory=list)
     history_gap: bool = False
+    agent_depth: int = 0   # from the Coordinator's agent registry, never from the caller
     notes: List[str] = Field(default_factory=list)
     # Legacy minister verdict strings only (e.g. {"VAULT": "ALLOW"}) -- never
     # the minister's reason text, which can carry redacted-but-still-sensitive detail.
