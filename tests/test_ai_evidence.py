@@ -427,6 +427,24 @@ def test_groq_errors_give_no_answer(monkeypatch, reply):
         server.shutdown()
 
 
+def test_groq_rate_limit_gives_no_answer_unless_retries_are_enabled(monkeypatch):
+    provider, seen, server = groq(monkeypatch, [(429, {}), (200, chat('{"ok": true}'))])
+    try:
+        assert provider.complete(SIMPLE, {}) is None
+    finally:
+        server.shutdown()
+    assert len(seen) == 1
+
+    monkeypatch.setenv("KAVACH_AI_RETRY_429", "2")
+    monkeypatch.setattr("kavach.ai.groq_provider.time.sleep", lambda s: None)
+    provider, seen, server = groq(monkeypatch, [(429, {}), (200, chat('{"ok": true}'))])
+    try:
+        assert provider.complete(SIMPLE, {}) == {"ok": True}
+    finally:
+        server.shutdown()
+    assert len(seen) == 2
+
+
 def test_from_env_selects_groq_and_its_default_model(monkeypatch):
     monkeypatch.setenv("KAVACH_AI", "live")
     monkeypatch.setenv("KAVACH_AI_PROVIDER", "groq")
