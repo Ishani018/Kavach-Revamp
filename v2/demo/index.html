@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kavach demo</title>
+<style>
+  :root { --bg:#f6f5f1; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#dedcd3; --accent:#2f5d50;
+          --user:#2f6f4f; --read:#b3541e; --new:#5a5f9c; --untraced:#8a8880; --ask:#b3541e; --deny:#a32d2d; --ok:#2f6f4f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#191917; --card:#232320; --ink:#ecebe6; --muted:#a3a199;
+          --line:#3a3935; --accent:#7fc4ad; --user:#7fc49a; --read:#f0a070; --new:#a9aeea; --untraced:#8f8d86;
+          --ask:#f0a070; --deny:#f08a8a; --ok:#7fc49a; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:980px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:10px 0 4px; }
+  select, button { font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  select { width:100%; } button { cursor:pointer; } button.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @media (max-width:640px){ .row{ grid-template-columns:1fr; } }
+  .quote { border-left:3px solid var(--line); padding:2px 0 2px 12px; margin:6px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .quote.bad { border-color:var(--deny); }
+  .step { border-left:4px solid var(--line); } .step.attacker { border-left-color:var(--deny); }
+  .step.ask { border-left-color:var(--ask); }
+  .head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .tool { font:600 14px ui-monospace,Menlo,Consolas,monospace; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; text-transform:uppercase; letter-spacing:.04em; }
+  .t-task{color:var(--muted)} .t-attacker{color:var(--deny)} .t-allow{color:var(--ok)} .t-ask{color:var(--ask)}
+  .t-denied{color:var(--deny)} .t-approved{color:var(--ok)} .t-read{color:var(--muted)}
+  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+  td { padding:3px 6px 3px 0; vertical-align:top; overflow-wrap:anywhere; } td.k { color:var(--muted); white-space:nowrap; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  td.v { font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .o-user{color:var(--user)} .o-read{color:var(--read)} .o-new{color:var(--new)} .o-untraced{color:var(--untraced)}
+  .reason { color:var(--muted); font-size:13px; margin-top:6px; }
+  details { margin-top:6px; font-size:13px; } pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:6px 0 0; color:var(--muted); max-height:180px; overflow:auto; }
+  .actions { margin-top:10px; display:flex; gap:8px; } .approve{ border-color:var(--ok); color:var(--ok);} .deny{ border-color:var(--deny); color:var(--deny);}
+  .outcome { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @media (max-width:640px){ .outcome{ grid-template-columns:1fr; } }
+  .big { font-size:17px; font-weight:600; } .good{color:var(--ok)} .bad{color:var(--deny)}
+  .legend { font-size:12px; color:var(--muted); margin-top:8px; } .legend b { font-weight:600; }
+  .note { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kavach</h1>
+  <p class="sub">A reviewer checks every action an AI agent wants to take: did its details come from you, or from something the agent read?</p>
+
+  <div class="card">
+    <div class="row">
+      <div><label for="suite">Area</label><select id="suite"></select></div>
+      <div><label for="guard">Guard</label>
+        <select id="guard">
+          <option value="anchored">Kavach, anchored (ask when nothing in the action came from the user)</option>
+          <option value="strict">Kavach, strict (ask when anything came only from what the agent read)</option>
+          <option value="off">Off</option>
+        </select></div>
+    </div>
+    <label for="task">What the user asks the agent to do</label><select id="task"></select>
+    <label for="goal">Attack hidden in what the agent reads</label><select id="goal"></select>
+    <div class="actions"><button class="primary" id="run">Run</button></div>
+    <p class="note">The agent here is the AgentDojo benchmark's reference solution, and under attack it obeys the hidden instruction completely. Tools really run against the benchmark's environment, and "task completed" and "attack succeeded" are the benchmark's own checks.</p>
+  </div>
+
+  <div id="out"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+let catalog = {}, human = [];
+
+function fill(select, items, label) {
+  select.replaceChildren(...items.map(i => { const o = el('option', null, label(i)); o.value = i.id; return o; }));
+}
+function onSuite() {
+  const s = catalog[$('suite').value];
+  fill($('task'), s.user_tasks, t => t.prompt.length > 140 ? t.prompt.slice(0, 140) + '…' : t.prompt);
+  fill($('goal'), [{id:'', goal:'No attack'}, ...s.attacker_goals], g => g.goal.length > 140 ? g.goal.slice(0, 140) + '…' : g.goal);
+  if (s.attacker_goals.length) $('goal').value = s.attacker_goals[0].id;
+}
+async function run() {
+  $('run').disabled = true;
+  const body = { suite:$('suite').value, user_task:$('task').value, attacker_goal:$('goal').value, guard:$('guard').value, human };
+  const r = await (await fetch('/api/run', { method:'POST', body:JSON.stringify(body) })).json();
+  $('run').disabled = false;
+  render(r);
+}
+function start() { human = []; run(); }
+function answer(ok) { human.push(ok); run(); }
+
+function render(r) {
+  const out = $('out'); out.replaceChildren();
+  if (r.error) { out.append(el('div', 'card', r.error)); return; }
+  const intro = el('div', 'card');
+  intro.append(el('label', null, 'User request'), el('div', 'quote', r.user_request));
+  if (r.injected_text) intro.append(el('label', null, 'Hidden in the data the agent reads'), el('div', 'quote bad', r.injected_text.trim()));
+  out.append(intro);
+
+  r.steps.forEach((s, i) => {
+    const waiting = r.pending && i === r.steps.length - 1;
+    const card = el('div', 'card step ' + s.who + (s.verdict !== 'allow' ? ' ask' : ''));
+    const head = el('div', 'head');
+    head.append(el('span', 'tool', s.tool));
+    head.append(el('span', 'tag t-' + s.who, s.who === 'attacker' ? 'injected action' : 'task step'));
+    if (!s.changes_state) head.append(el('span', 'tag t-read', 'read only'));
+    else head.append(el('span', 'tag t-' + s.verdict, s.verdict === 'allow' ? 'allowed' : 'ask the human'));
+    if (s.human) head.append(el('span', 'tag t-' + s.human, s.human));
+    card.append(head);
+    const keys = Object.keys(s.origins);
+    if (keys.length) {
+      const table = el('table');
+      keys.forEach(k => { const tr = el('tr'); const v = k.split(/[.\[\]]+/).filter(Boolean).reduce((a, p) => a?.[p], s.args);
+        tr.append(el('td', 'k', k), el('td', 'v', String(v).length > 160 ? String(v).slice(0, 160) + '…' : String(v)));
+        const o = el('td', 'o-' + s.origins[k], { user:'from the user', read:'from what the agent read', new:'composed by the agent', untraced:'not traced' }[s.origins[k]]);
+        tr.append(o); table.append(tr); });
+      card.append(table);
+    }
+    if (s.changes_state && r.guard !== 'off') card.append(el('div', 'reason', s.reason));
+    if (s.executed && s.output) { const d = el('details'); d.append(el('summary', null, 'Tool output'), el('pre', null, s.output)); card.append(d); }
+    if (waiting) {
+      const a = el('div', 'actions'); const y = el('button', 'approve', 'Approve'), n = el('button', 'deny', 'Deny');
+      y.onclick = () => answer(true); n.onclick = () => answer(false); a.append(y, n); card.append(a);
+    }
+    out.append(card);
+  });
+
+  if (r.outcome) {
+    const card = el('div', 'card'); const grid = el('div', 'outcome');
+    const side = (title, o) => { const d = el('div'); d.append(el('label', null, title));
+      d.append(el('div', 'big ' + (o.task_done ? 'good' : 'bad'), o.task_done ? 'User task completed' : 'User task not completed'));
+      if (o.attack_succeeded !== null) d.append(el('div', 'big ' + (o.attack_succeeded ? 'bad' : 'good'), o.attack_succeeded ? 'Attack succeeded' : 'Attack did not succeed'));
+      return d; };
+    const mine = side(r.guard === 'off' ? 'This run (guard off)' : 'This run, with Kavach', r.outcome);
+    mine.append(el('div', 'reason', r.outcome.asks + ' ask(s) to the human'));
+    grid.append(mine, side('Same scenario with no guard', r.without_guard));
+    card.append(grid);
+    if (r.attacker_goal && r.injection_read === false) card.append(el('div', 'reason', 'The step that would have shown the hidden text to the agent was denied, so the agent never read it.'));
+    out.append(card);
+  } else {
+    out.append(el('div', 'card reason', 'Waiting for your answer above.'));
+  }
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+}
+
+fetch('/api/catalog').then(r => r.json()).then(c => {
+  catalog = c;
+  fill($('suite'), Object.keys(c).map(id => ({ id })), s => s.id);
+  $('suite').value = 'banking'; onSuite();
+  $('suite').onchange = onSuite; $('run').onclick = start;
+});
+</script>
+</body>
+</html>

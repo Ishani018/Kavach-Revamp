@@ -61,12 +61,29 @@ def origins(action: Action, session: Session) -> dict[str, Origin]:
 
 
 class ProvenanceReviewer:
-    """Asks the human when an argument came only from something the agent read."""
-    name = "provenance"
+    """Asks the human when arguments came only from something the agent read.
+
+    strict   : ask if ANY argument came only from tool output.
+    anchored : ask only if some argument came from tool output AND no argument came from the user's
+               request. The idea: if the user named part of the action (the recipient, the file), the
+               action is tied to their request. Weaker by design: an attacker who reuses a value from the
+               user's request gets through.
+    """
+
+    def __init__(self, mode: str = "strict"):
+        if mode not in ("strict", "anchored"):
+            raise ValueError(f"unknown mode: {mode}")
+        self.mode = mode
+        self.name = "provenance" if mode == "strict" else "provenance-anchored"
 
     def review(self, action: Action, session: Session) -> Opinion:
-        read_only = sorted(p for p, o in origins(action, session).items() if o is Origin.READ)
-        if read_only:
-            return Opinion(self.name, Verdict.ASK,
-                           "argument(s) taken from tool output, not from the user: " + ", ".join(read_only))
-        return Opinion(self.name, Verdict.ALLOW, "no argument came only from tool output")
+        traced = origins(action, session)
+        from_read = sorted(p for p, o in traced.items() if o is Origin.READ)
+        from_user = sorted(p for p, o in traced.items() if o is Origin.USER)
+        if not from_read:
+            return Opinion(self.name, Verdict.ALLOW, "no argument came only from tool output")
+        if self.mode == "anchored" and from_user:
+            return Opinion(self.name, Verdict.ALLOW,
+                           "the user named " + ", ".join(from_user) + "; from tool output: " + ", ".join(from_read))
+        return Opinion(self.name, Verdict.ASK,
+                       "argument(s) taken from tool output, not from the user: " + ", ".join(from_read))

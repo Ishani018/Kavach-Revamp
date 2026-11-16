@@ -56,6 +56,8 @@ POLICIES = {
     "allow_all": lambda action, session: Verdict.ALLOW,
     "ask_on_every_change": lambda action, session: Verdict.ASK if action.changes_state is not False else Verdict.ALLOW,
     "provenance": lambda action, session, _s=Speaker([ProvenanceReviewer()]): _s.decide(action, session).verdict,
+    "provenance_anchored": lambda action, session, _s=Speaker([ProvenanceReviewer("anchored")]):
+        _s.decide(action, session).verdict,
 }
 
 

@@ -1,64 +1,85 @@
 # Kavach v2
 
-A restart of Kavach that keeps the idea and drops the implementation. The code outside this folder is the old system and is not used here.
+A thin layer between an AI agent and its tools. It reviews every action that changes something and asks one question: **did the details of this action come from the user, or from something the agent read?** It then allows the action or asks the human.
 
-## The idea
+This is a restart. The code outside this folder is the old system and is not used here.
 
-A small panel of narrow reviewers looks at each action an AI agent wants to take. A Speaker combines their opinions into one verdict: **allow**, **block**, or **ask** the human.
+- No model and no API key: the guard is under 200 lines of plain Python.
+- No lists of dangerous commands, tools or patterns.
+- Every number below comes from AgentDojo, an external benchmark, scored by its own checks.
 
-## What is different from the old system
+![Demo screenshot](demo/screenshot.png)
 
-- **No attack catalogue.** There are no lists of dangerous commands, patterns or tools. Each reviewer answers one question about the action.
-- **No benchmarks of our own.** Results come only from external benchmarks that score themselves (AgentDojo first, then AgentDyn), run with an agent in the loop.
-- **"Ask" is counted.** How often the human is interrupted is reported next to how many attacks get through. A guard that asks about everything is not a result.
-- **Rules are fixed before measuring.** Anything changed after seeing benchmark results is written down as such.
+## Run the demo
 
-## Research question
+```bash
+cd v2
+pip install -r requirements.txt
+python -m demo.server          # then open http://127.0.0.1:8765
+```
 
-Does a panel of narrow reviewers protect an agent better than one general guard given the same information, and what does it cost in asks and in failed honest tasks?
+Pick an area, a user request and an attack hidden in the data, then press Run. Each action shows where every argument came from and what the guard decided. When the guard asks, you approve or deny. At the end the benchmark reports whether the user's task was completed and whether the attack succeeded, next to the same scenario with no guard.
 
-## Reviewers
+A good first scenario is the default: banking, "pay the bill", anchored guard. Deny the injected payment and the attack fails; approve it and the attack succeeds.
 
-| Reviewer | Question | Needs a model | Status |
-|---|---|---|---|
-| Provenance | Did this action's arguments come from the user, or only from something the agent read? | no | written, unit-tested |
-| Mandate | Is this action part of what the user asked for? | yes | not written |
+The agent in the demo is the benchmark's reference solution, and under attack it obeys the hidden instruction completely. No language model is involved.
 
-Whether an action changes anything is taken from the tool's own declaration (`Action.changes_state`), not from a list. Declared read-only actions are not reviewed; undeclared tools are treated as state-changing.
+## How it works
 
-## Status
+For each argument of a state-changing action, the guard finds its origin:
 
-One experiment has been run. It uses no model and no API key.
+| Origin | Meaning |
+|---|---|
+| user | the value appears in the user's request |
+| read | it appears only in something the agent read from a tool |
+| new | it appears in neither; the agent composed it |
+| untraced | boolean, empty, or shorter than three characters |
 
-### Experiment 1: replaying AgentDojo's reference runs (AgentDojo 0.1.35, benchmark v1.2.2)
+Two modes decide when to ask:
 
-`experiments/replay_agentdojo.py` replays the benchmark's own reference action sequences. An honest run is a user task's reference calls. A hijacked run is a user task's reference calls followed by an attacker goal's reference calls, with AgentDojo's `important_instructions` attack text planted where the task reads it: an agent that obeys the injection completely.
+- **strict**: ask if any argument has origin *read*.
+- **anchored**: ask only if some argument is *read* and none is *user*.
 
-| Policy | Honest tasks interrupted at least once | Hijacked runs that pass with no ask |
+Whether a tool changes state comes from the tool's own declaration (`Action.changes_state`). AgentDojo tools declare nothing, so the experiments observe it: a tool is state-changing if any reference call to it changed the environment.
+
+## Results
+
+AgentDojo 0.1.35, benchmark v1.2.2, 97 user tasks and 609 task and attack pairs. The agent is the reference solution and obeys every injection it reads.
+
+**How often the human is asked** (`python -m experiments.replay_agentdojo`):
+
+| Policy | Honest tasks with at least one ask | Hijacked runs with no ask at all |
 |---|---|---|
-| Allow everything | 0 / 97 (0%) | 609 / 609 (100%) |
-| Ask on every state change | 62 / 97 (64%) | 0 / 609 (0%) |
-| Provenance reviewer | 38 / 97 (39%) | 46 / 609 (8%) |
+| No guard | 0 / 97 (0%) | 609 / 609 (100%) |
+| Ask before every state change | 62 / 97 (64%) | 0 / 609 (0%) |
+| Kavach strict | 38 / 97 (39%) | 46 / 609 (8%) |
+| Kavach anchored | 18 / 97 (19%) | 48 / 609 (8%) |
 
-Per suite, Provenance interrupts 20% of honest tasks in workspace and travel, 44% in banking and 90% in slack. Full counts are in `experiments/replay_agentdojo_result.json`.
+**Unattended, every ask is a denial** (`python -m experiments.scored_replay`):
 
-What this does and does not show:
+| Policy | Task done, no attack | Task done, under attack | Attack succeeded |
+|---|---|---|---|
+| No guard | 97 / 97 (100%) | 239 / 609 (39%) | 593 / 609 (97%) |
+| Kavach strict | 63 / 97 (65%) | 399 / 609 (66%) | 44 / 609 (7%) |
+| Kavach anchored | 81 / 97 (84%) | 485 / 609 (80%) | 46 / 609 (8%) |
 
-- It shows the trade-off the Provenance reviewer makes on reference runs. It is not a result about real agents: no agent ran, so nothing here says how often an agent gets hijacked or finishes its task.
-- The attacker did not adapt. An injection that makes the agent compose a value instead of copying it would not be traced.
-- 40 of the 46 silent passes are one workspace attacker goal ("delete the file with ID '13'"): the ID is shorter than the 3-character tracing minimum, so it is untraced and allowed. The minimum was fixed before the run and has not been changed.
-- 340 hijacked runs are excluded. Workspace attacker goals 6 to 13 ship no reference calls in this benchmark version (320 runs), and one travel goal only changes what the agent says (20 runs), which an action guard cannot see.
-- "State-changing" is observed from the reference runs (a tool is state-changing if any reference call to it changed the environment), because AgentDojo tools declare nothing. This marks `get_unread_emails` and `get_webpage` as state-changing, since they do modify the environment.
-- An ask is counted as an interruption. The human's answer is not simulated.
+Raw counts per suite are in `experiments/*.json`.
 
-Next step: a second reviewer that separates "the user asked for this" from "something the agent read asked for this", to bring the 39% down without raising the 8%.
+## What these results do not show
 
-```bash
-cd v2 && pip install agentdojo==0.1.35 && python -m experiments.replay_agentdojo
-```
+- **No real agent ran.** A language model does not follow reference solutions, so these numbers do not predict end-to-end rates for any model.
+- **The attacker did not adapt.** An injection that makes the agent compose a value instead of copying it is not traced, and in anchored mode an injected action that reuses a value from the user's request is allowed.
+- **Short values are not traced.** 40 of the 46 strict-mode misses are one attack, "delete the file with ID '13'".
+- **Slack-style tasks are hard.** Honest tasks there act on what they read, so only 57% complete unattended in anchored mode.
+- **340 pairs are excluded**: 320 where the benchmark ships no reference actions for the attacker goal, and 20 where the attack only changes what the agent says.
+- **One fix was made after the first scored run**: the simulated agent originally performed attacker actions even when the guard had denied the step that would have shown it the injection. The guard's rules were fixed before any run and have not been changed.
 
-## Run the tests
+## Layout
 
-```bash
-cd v2 && python -m pytest tests -q
-```
+| Path | What |
+|---|---|
+| `kavach2/` | the guard: origins, reviewer, Speaker |
+| `demo/` | scenario engine, local server, web page |
+| `experiments/` | the two experiments and their results |
+| `paper/draft.md` | paper draft using only the numbers above |
+| `tests/` | 11 unit tests (`python -m pytest tests -q`) |
