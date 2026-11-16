@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "kavach": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "kavach2.gateway", "--config", "${workspaceFolder}/v2/kavach.demo.json"],
+      "env": { "PYTHONPATH": "${workspaceFolder}/v2" }
+    }
+  }
+}

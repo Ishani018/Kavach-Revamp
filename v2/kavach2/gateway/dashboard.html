@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kavach gateway</title>
+<style>
+  :root { --bg:#f6f5f1; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#dedcd3; --accent:#2f5d50;
+          --user:#2f6f4f; --read:#b3541e; --new:#5a5f9c; --deny:#a32d2d; --lane:#efede6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#191917; --card:#232320; --ink:#ecebe6; --muted:#a3a199;
+          --line:#3a3935; --accent:#7fc4ad; --user:#7fc49a; --read:#f0a070; --new:#a9aeea; --deny:#f08a8a; --lane:#2b2b27; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px; }
+  .cols { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:14px; align-items:start; }
+  .cols > * { min-width:0; } @media (max-width:860px){ .cols { grid-template-columns:minmax(0,1fr); } }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; } .chip { font-size:12px; border:1px solid var(--line); border-radius:99px; padding:2px 10px; color:var(--muted); }
+  .graphwrap { overflow-x:auto; } svg { display:block; width:100%; }
+  svg text { font:12px system-ui,sans-serif; fill:var(--muted); } svg .lanehead { font-weight:600; font-size:13px; fill:var(--ink); }
+  svg .lane { fill:var(--lane); } svg .edge { stroke:var(--muted); stroke-width:1.3; fill:none; opacity:.6; }
+  svg .dot { fill:var(--card); stroke:var(--muted); stroke-width:1.5; }
+  svg .ask .dot { stroke:var(--read); fill:var(--read); } svg .ask text { fill:var(--read); }
+  svg .src .dot { stroke:var(--read); stroke-width:3; } svg .src .edge { stroke:var(--read); stroke-width:2.5; opacity:1; } svg .src text { fill:var(--read); }
+  svg .flow { stroke:var(--read); stroke-width:2; fill:none; stroke-dasharray:5 4; }
+  .step { border-left:4px solid var(--line); } .step.ask { border-left-color:var(--read); } .step.wait { box-shadow:0 0 0 2px var(--read); }
+  .head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; } .time { color:var(--muted); font-size:12px; margin-left:auto; }
+  .tool { font:600 14px ui-monospace,Menlo,Consolas,monospace; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; text-transform:uppercase; letter-spacing:.04em; }
+  .t-read{color:var(--muted)} .t-allow{color:var(--user)} .t-ask{color:var(--read)} .t-denied{color:var(--deny)} .t-approved{color:var(--user)}
+  .arg { display:block; width:100%; text-align:left; font:inherit; color:inherit; border:1px solid transparent; border-radius:6px; padding:4px 6px; margin-top:4px; background:none; font-size:13px; cursor:pointer; }
+  .arg:hover, .arg.on { border-color:var(--line); background:var(--lane); }
+  .arg code { font-family:ui-monospace,Menlo,Consolas,monospace; overflow-wrap:anywhere; } .arg .k { color:var(--muted); }
+  .chain { display:block; font-size:12px; } .o-user{color:var(--user)} .o-read{color:var(--read)} .o-new{color:var(--new)} .o-untraced{color:var(--muted)}
+  .reason { color:var(--muted); font-size:13px; margin-top:6px; }
+  .actions { margin-top:10px; display:flex; gap:8px; }
+  button.act { font:inherit; font-weight:600; background:var(--card); border:1px solid; border-radius:8px; padding:8px 14px; cursor:pointer; }
+  .approve{ color:var(--user);} .deny{ color:var(--deny);}
+  .empty { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kavach gateway</h1>
+  <p class="sub">Every tool call your agent makes passes through here. Before an action runs, Kavach checks where its details came from.</p>
+  <div class="card"><label>Protected tool servers</label><div class="chips" id="servers"></div></div>
+  <div id="out"><div class="card empty">Waiting for the agent's first tool call.</div></div>
+</main>
+<script>
+const token = new URLSearchParams(location.search).get('t') || '';
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svg = (tag, attrs, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+const short = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
+const WORDS = { user:'from you', read:'from tool output', new:'written by the agent', untraced:'not traced' };
+let state = null, pick = null, lastKey = '';
+const api = (path, body) => fetch(path, { method: body ? 'POST' : 'GET', headers:{ 'X-Kavach-Token':token }, body: body ? JSON.stringify(body) : undefined }).then(r => r.json());
+const dig = (args, path) => path.split(/[.\[\]]+/).filter(Boolean).reduce((a, p) => a?.[p], args);
+
+function drawGraph(calls, sel) {
+  const lanes = ['agent', ...state.servers.map(s => s.name)], W = 520, rowH = 34, top = 44, laneW = W / lanes.length;
+  const x = a => lanes.indexOf(a) * laneW + laneW / 2, H = top + calls.length * rowH + 10;
+  const g = svg('svg', { viewBox:`0 0 ${W} ${H}`, role:'img', 'aria-label':'Tool calls and where their arguments came from' });
+  const defs = svg('defs', {}), m = svg('marker', { id:'arr', viewBox:'0 0 10 10', refX:9, refY:5, markerWidth:6, markerHeight:6, orient:'auto' });
+  m.append(svg('path', { d:'M0,0 L10,5 L0,10 z', fill:'currentColor', opacity:.6 })); defs.append(m); g.append(defs);
+  lanes.forEach((a, i) => { g.append(svg('rect', { class:'lane', x:i * laneW + 4, y:28, width:laneW - 8, height:H - 32, rx:8 }));
+    g.append(svg('text', { class:'lanehead', x:x(a), y:18, 'text-anchor':'middle' }, a)); });
+  const srcNodes = new Set(sel ? sel.t.nodes : []), rowOf = {};
+  calls.forEach((e, i) => {
+    const y = top + i * rowH, from = x('agent'), to = x(e.server), isSrc = e.node != null && srcNodes.has(e.node);
+    rowOf[e.id] = y;
+    const grp = svg('g', { class:(e.verdict !== 'allow' ? 'ask ' : '') + (isSrc ? 'src' : '') });
+    grp.append(svg('path', { class:'edge', d:`M${from},${y} L${to - 9},${y}`, 'marker-end':'url(#arr)' }));
+    grp.append(svg('text', { x:(from + to) / 2, y:y - 6, 'text-anchor':'middle' }, short(e.tool, 24)));
+    grp.append(e.changes_state ? svg('rect', { class:'dot', x:to - 7, y:y - 7, width:14, height:14, rx:3 }) : svg('circle', { class:'dot', cx:to, cy:y, r:6 }));
+    g.append(grp);
+  });
+  if (sel) calls.filter(e => e.node != null && srcNodes.has(e.node)).forEach(e => {
+    const x1 = x(e.server), y1 = rowOf[e.id], x2 = x(sel.e.server), y2 = rowOf[sel.e.id], bend = Math.max(x1, x2) + 34;
+    g.append(svg('path', { class:'flow', d:`M${x1 + 7},${y1} C${bend},${y1} ${bend},${y2} ${x2 + 8},${y2}` }));
+  });
+  return g;
+}
+
+function render() {
+  $('servers').replaceChildren(...state.servers.map(s => el('span', 'chip', `${s.name} · ${s.tools} tools` + (s.trusted ? ' · trusted source' : ''))));
+  const calls = state.events.filter(e => e.tool);
+  if (!calls.length) return;
+  if (!pick || !calls.find(e => e.id === pick.id)) { pick = null; // default: the value behind the latest ask
+    for (const e of calls) for (const [k, t] of Object.entries(e.traces)) if (t.origin === 'read') pick = { id:e.id, k }; }
+  const selEvent = pick && calls.find(e => e.id === pick.id), sel = selEvent ? { e:selEvent, t:selEvent.traces[pick.k] } : null;
+  const cols = el('div', 'cols'), left = el('div', 'card'), right = el('div');
+  left.append(el('label', null, 'Tool calls (time runs downward)'));
+  const wrap = el('div', 'graphwrap'); wrap.append(drawGraph(calls, sel)); left.append(wrap);
+  left.append(el('div', 'reason', 'Circles are reads, squares are actions. The dashed line shows where the selected value was first read.'));
+  [...calls].reverse().forEach(e => {
+    const waiting = state.pending.includes(e.id);
+    const card = el('div', 'card step' + (e.verdict !== 'allow' ? ' ask' : '') + (waiting ? ' wait' : '')), head = el('div', 'head');
+    head.append(el('span', 'tool', `${e.server}.${e.tool}`));
+    if (!e.changes_state) head.append(el('span', 'tag t-read', 'read'));
+    else head.append(el('span', 'tag t-' + e.verdict, e.verdict === 'allow' ? 'action allowed' : 'action held'));
+    if (e.human) head.append(el('span', 'tag t-' + (e.human === 'approved' ? 'approved' : 'denied'), e.human));
+    head.append(el('span', 'time', e.time)); card.append(head);
+    Object.entries(e.traces).forEach(([k, t]) => {
+      const b = el('button', 'arg' + (pick && pick.id === e.id && pick.k === k ? ' on' : '')), line = el('span');
+      line.append(el('span', 'k', k + ': '), el('code', null, short(String(dig(e.args, k)), 110)));
+      b.append(line, el('span', 'chain o-' + t.origin, WORDS[t.origin] + (t.sources.length ? ':  ' + t.sources.join('  ←  ') : '')));
+      b.onclick = () => { pick = { id:e.id, k }; render(); }; card.append(b);
+    });
+    if (e.changes_state) card.append(el('div', 'reason', e.reason));
+    if (waiting) { const a = el('div', 'actions'), y = el('button', 'act approve', 'Approve'), n = el('button', 'act deny', 'Deny');
+      y.onclick = () => api('/api/answer', { id:e.id, approve:true }).then(tick); n.onclick = () => api('/api/answer', { id:e.id, approve:false }).then(tick);
+      a.append(y, n); card.append(a); }
+    right.append(card);
+  });
+  cols.append(left, right); $('out').replaceChildren(cols);
+}
+
+async function tick() {
+  try { const s = await api('/api/state'), key = JSON.stringify(s);
+    if (key !== lastKey) { lastKey = key; state = s; render(); document.title = (s.pending.length ? '(!) ' : '') + 'Kavach gateway'; } } catch (e) {}
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

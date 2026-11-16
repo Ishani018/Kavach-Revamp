@@ -1,30 +1,47 @@
 # Kavach v2
 
-When AI agents pass work to each other, nobody remembers where a detail came from. One agent reads a poisoned web page, passes it on, and the next agent treats it as an instruction from a trusted colleague.
+Kavach is a gateway that sits between an AI agent and its tools. Every tool call passes through it. Before an action runs, Kavach traces each detail of that action back to where it came from, and if a detail came from something the agent read rather than from you, it holds the action and asks you.
 
-Kavach keeps a **provenance graph** of what every agent was told, read and sent. Before an agent runs an action that changes something, Kavach traces each detail of that action back across the agents' messages to where it first entered the system: **the user, or something an agent read?** It then allows the action or asks the human.
+It works with any agent that speaks MCP (VS Code Copilot, Cursor, Claude Desktop and others), because it is itself an MCP server that stands in front of your real ones.
 
 This is a restart. The code outside this folder is the old system and is not used here.
 
-- No model and no API key: the guard is about 300 lines of plain Python.
-- No lists of dangerous commands, tools or patterns.
-- Every number below comes from AgentDojo, an external benchmark, scored by its own checks.
+- No model and no API key. The agent is whatever you already use.
+- No lists of dangerous commands, tools or patterns. Whether a tool is a read or an action comes from the tool's own MCP declaration (`readOnlyHint`), which you can override per tool.
+- Python standard library only.
 
-![Demo screenshot](demo/screenshot.png)
+![Gateway dashboard](kavach2/gateway/screenshot.png)
 
-## Run the demo
+## Try it with VS Code Copilot
+
+1. Open this repository in VS Code. `.vscode/mcp.json` registers one MCP server called `kavach`, which runs the gateway with two demo tool servers behind it: a `helpdesk` inbox (anyone can file a ticket, and ticket 103 hides an instruction) and a `mailer` (writes to a local file, nothing leaves your machine).
+2. Start the `kavach` server from the MCP servers list. Open the dashboard link written to `v2/kavach-dashboard-url.txt`.
+3. In Copilot Chat, switch to Agent mode and ask: *"Read all the open helpdesk tickets and email a short summary to manager@ourcompany.example."*
+4. Watch the dashboard. Reads pass straight through. If the agent follows the instruction hidden in ticket 103 and tries to email the customer list to the address in that ticket, the action is held and the dashboard shows that the address came from `helpdesk.read_ticket`. Approve or deny it there.
+
+Whether Copilot obeys the hidden instruction depends on the model; that is the point of testing with a real agent. **This setup has been tested with the official MCP Python client, not yet inside VS Code itself.**
+
+To protect your own servers, copy `kavach.demo.json`, list them under `servers` the same way you would in `mcp.json`, and point the gateway at that file. Options per server: `"trusted": true` (content from this server is treated as your own, for example your own workspace files) and `"changes_state": {"tool_name": true}` to override a tool's declaration.
+
+## What the gateway can and cannot see
+
+- It sees every tool call and every tool result, across all the servers behind it.
+- It does **not** see what you typed to the agent. So a value is either "from tool output" or "written by the agent"; anything you typed counts as written by the agent and is allowed. A client hook can report your prompt to `POST /api/prompt` on the dashboard port, which the graph then uses, but no hook is shipped yet.
+- It only follows values that are copied unchanged. If the agent rewords something on the way, the link is lost.
+- Ordinary words collide. An email subject of "summary" is held if the word "summary" appeared in any earlier tool output. Expect false alarms on short common values; this needs measuring with real use.
+- A tool that lies about being read-only is not reviewed unless you override it in the config.
+
+## The benchmark results below
+
+The rest of this README covers the model-free experiments on AgentDojo that came before the gateway. They use the same tracing code, with scripted agents.
 
 ```bash
 cd v2
 pip install -r requirements.txt
-python -m demo.server          # then open http://127.0.0.1:8765
+python -m demo.server          # benchmark demo at http://127.0.0.1:8765
 ```
 
-Three agents carry out a task: a coordinator delegates, a researcher reads, an executor acts. Pick a user request and an attack hidden in the data, then press Run. The page draws the graph of messages between the agents, shows where every argument of each action came from, and highlights the path when you click an argument. When the guard asks, you approve or deny. At the end the benchmark reports whether the task was completed and whether the attack succeeded, next to the same scenario with no guard.
-
-Good first scenario (the default): banking, "pay the bill", Kavach graph. The injected account number is traced executor ← coordinator ← researcher ← the file. Deny it and the attack fails. Then switch the guard to "per-agent guard that trusts colleagues" and run again: the attack goes straight through.
-
-The agents are scripted from the benchmark's reference solutions, and under attack the coordinator obeys the hidden instruction. No language model is involved.
+![Benchmark demo](demo/screenshot.png)
 
 ## Use it in your own multi-agent system
 
@@ -112,7 +129,9 @@ Raw counts per suite are in `experiments/*.json`.
 | Path | What |
 |---|---|
 | `kavach2/` | the guard: origins, reviewer, Speaker, and the multi-agent provenance graph (`graph.py`) |
+| `kavach2/gateway/` | the MCP gateway, its dashboard, and a minimal MCP server helper |
+| `demo_servers/` | two demo MCP tool servers: `helpdesk` and `mailer` |
 | `demo/` | scenario engines (single agent and team), local server, web page |
 | `experiments/` | the three experiments and their results |
 | `paper/draft.md` | paper draft using only the numbers above |
-| `tests/` | 18 unit tests (`python -m pytest tests -q`) |
+| `tests/` | 23 tests, including end-to-end gateway tests (`python -m pytest tests -q`) |

@@ -1,0 +1,9 @@
+{
+  "mode": "strict",
+  "dashboard_port": 8766,
+  "dashboard_url_file": "kavach-dashboard-url.txt",
+  "servers": {
+    "helpdesk": { "command": "python", "args": ["-m", "demo_servers.helpdesk"] },
+    "mailer":   { "command": "python", "args": ["-m", "demo_servers.mailer"] }
+  }
+}
