@@ -10,7 +10,7 @@ from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from demo import engine
+from demo import engine, team
 
 PAGE = Path(__file__).with_name("index.html")
 
@@ -42,9 +42,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             q = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             goal = q.get("attacker_goal") or None
-            result = engine.run(q["suite"], q["user_task"], goal, q["guard"], [bool(x) for x in q.get("human", [])])
+            answers = [bool(x) for x in q.get("human", [])]
+            if q["guard"] not in team.GUARDS:
+                raise ValueError("unknown guard")
+            result = team.run(q["suite"], q["user_task"], goal, q["guard"], answers)
             # The same scenario with no guard, for the "without Kavach" line.
-            result["without_guard"] = engine.run(q["suite"], q["user_task"], goal, "off")["outcome"]
+            result["without_guard"] = team.run(q["suite"], q["user_task"], goal, "off")["outcome"]
             self._send(200, json.dumps(result).encode(), "application/json")
         except (KeyError, ValueError) as e:
             self._send(400, json.dumps({"error": f"bad request: {e}"}).encode(), "application/json")

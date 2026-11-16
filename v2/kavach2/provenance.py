@@ -38,19 +38,23 @@ def _number_appears(value: float, text: str) -> bool:
     return any(float(token) == value for token in _NUMBER.findall(text))
 
 
+def contains(value: Any, text: str) -> bool:
+    """Does this argument value appear in this text? Numbers by value, text as a whole value."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _number_appears(float(value), text)
+    return _appears(str(value).strip(), text)
+
+
+def traceable(value: Any) -> bool:
+    return value is not None and not isinstance(value, bool) and len(str(value).strip()) >= MIN_TRACEABLE_CHARS
+
+
 def origin_of(value: Any, session: Session) -> Origin:
-    if value is None or isinstance(value, bool):
+    if not traceable(value):
         return Origin.UNTRACED
-    text = str(value).strip()
-    if len(text) < MIN_TRACEABLE_CHARS:
-        return Origin.UNTRACED
-    if isinstance(value, (int, float)):
-        found = lambda where: _number_appears(float(value), where)
-    else:
-        found = lambda where: _appears(text, where)
-    if found(session.user_request):
+    if contains(value, session.user_request):
         return Origin.USER
-    if any(found(seen) for seen in session.observations):
+    if any(contains(value, seen) for seen in session.observations):
         return Origin.READ
     return Origin.NEW
 

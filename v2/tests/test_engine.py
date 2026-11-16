@@ -23,3 +23,24 @@ def test_the_guard_pauses_on_the_injected_payment_and_a_denial_stops_the_attack(
 
 def test_approving_the_ask_lets_the_attack_through():
     assert engine.run(*SCENARIO, "anchored", human=[True])["outcome"]["attack_succeeded"]
+
+
+# --- the three-agent team (demo/team.py) ---
+from demo import team  # noqa: E402
+
+
+def test_a_per_agent_guard_that_trusts_colleagues_lets_the_attack_through():
+    outcome = team.run(*SCENARIO, "trust_peers")["outcome"]
+    assert outcome["attack_succeeded"] and outcome["asks"] == 0
+
+
+def test_the_graph_traces_the_injected_account_back_through_two_agents_to_the_file():
+    paused = team.run(*SCENARIO, "graph_anchored")
+    step = paused["events"][-1]
+    assert paused["pending"] and step["who"] == "attacker"
+    trace = step["traces"]["recipient"]
+    hops = [next(e for e in paused["events"] if e["node"] == n) for n in trace["path"]]
+    assert trace["origin"] == "read"
+    assert [(h["kind"], h["agent"]) for h in hops] == [("message", "executor"), ("message", "coordinator"), ("read", "researcher")]
+    denied = team.run(*SCENARIO, "graph_anchored", human=[False])["outcome"]
+    assert denied["task_done"] and not denied["attack_succeeded"]

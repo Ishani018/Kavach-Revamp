@@ -6,60 +6,71 @@
 <title>Kavach demo</title>
 <style>
   :root { --bg:#f6f5f1; --card:#fff; --ink:#1d1d1b; --muted:#6b6a65; --line:#dedcd3; --accent:#2f5d50;
-          --user:#2f6f4f; --read:#b3541e; --new:#5a5f9c; --untraced:#8a8880; --ask:#b3541e; --deny:#a32d2d; --ok:#2f6f4f; }
+          --user:#2f6f4f; --read:#b3541e; --new:#5a5f9c; --untraced:#8a8880; --deny:#a32d2d; --lane:#efede6; }
   @media (prefers-color-scheme: dark) { :root { --bg:#191917; --card:#232320; --ink:#ecebe6; --muted:#a3a199;
           --line:#3a3935; --accent:#7fc4ad; --user:#7fc49a; --read:#f0a070; --new:#a9aeea; --untraced:#8f8d86;
-          --ask:#f0a070; --deny:#f08a8a; --ok:#7fc49a; } }
+          --deny:#f08a8a; --lane:#2b2b27; } }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  main { max-width:980px; margin:0 auto; padding:24px 16px 64px; }
-  h1 { font-size:22px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; }
+  main { max-width:1180px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 20px; max-width:70ch; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
   label { display:block; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:10px 0 4px; }
   select, button { font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
   select { width:100%; } button { cursor:pointer; } button.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:600; }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @media (max-width:640px){ .row{ grid-template-columns:1fr; } }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .cols { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:14px; align-items:start; }
+  .cols > *, .row > * { min-width:0; }
+  @media (max-width:860px){ .row, .cols { grid-template-columns:minmax(0,1fr); } }
   .quote { border-left:3px solid var(--line); padding:2px 0 2px 12px; margin:6px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-  .quote.bad { border-color:var(--deny); }
-  .step { border-left:4px solid var(--line); } .step.attacker { border-left-color:var(--deny); }
-  .step.ask { border-left-color:var(--ask); }
+  .quote.bad { border-color:var(--deny); color:var(--deny); font-size:13px; }
+  .graphwrap { overflow-x:auto; } svg { display:block; min-width:560px; width:100%; }
+  svg text { font:12px system-ui,sans-serif; fill:var(--ink); } svg .lanehead { font-weight:600; font-size:13px; }
+  svg .lane { fill:var(--lane); } svg .edge { stroke:var(--muted); stroke-width:1.3; fill:none; opacity:.55; }
+  svg .dot { fill:var(--card); stroke:var(--muted); stroke-width:1.5; } svg .lbl { fill:var(--muted); }
+  svg .k-user .dot { stroke:var(--user); fill:var(--user); } svg .k-read .dot { stroke:var(--read); }
+  svg .k-action .dot { stroke:var(--ink); } svg .ask .dot { stroke:var(--read); fill:var(--read); }
+  svg .attacker .lbl { fill:var(--deny); }
+  svg .hl-read .dot, svg .hl-read.edge { stroke:var(--read); stroke-width:3; opacity:1; }
+  svg .hl-user .dot, svg .hl-user.edge { stroke:var(--user); stroke-width:3; opacity:1; }
+  svg .hl-new .dot, svg .hl-new.edge { stroke:var(--new); stroke-width:3; opacity:1; }
+  .step { border-left:4px solid var(--line); } .step.attacker { border-left-color:var(--deny); } .step.ask { border-left-color:var(--read); }
   .head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .tool { font:600 14px ui-monospace,Menlo,Consolas,monospace; }
   .tag { font-size:11px; padding:2px 8px; border-radius:99px; border:1px solid currentColor; text-transform:uppercase; letter-spacing:.04em; }
-  .t-task{color:var(--muted)} .t-attacker{color:var(--deny)} .t-allow{color:var(--ok)} .t-ask{color:var(--ask)}
-  .t-denied{color:var(--deny)} .t-approved{color:var(--ok)} .t-read{color:var(--muted)}
-  table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
-  td { padding:3px 6px 3px 0; vertical-align:top; overflow-wrap:anywhere; } td.k { color:var(--muted); white-space:nowrap; font-family:ui-monospace,Menlo,Consolas,monospace; }
-  td.v { font-family:ui-monospace,Menlo,Consolas,monospace; }
-  .o-user{color:var(--user)} .o-read{color:var(--read)} .o-new{color:var(--new)} .o-untraced{color:var(--untraced)}
+  .t-task{color:var(--muted)} .t-attacker{color:var(--deny)} .t-allow{color:var(--user)} .t-ask{color:var(--read)} .t-denied{color:var(--deny)} .t-approved{color:var(--user)}
+  .arg { display:block; width:100%; text-align:left; border:1px solid transparent; border-radius:6px; padding:4px 6px; margin-top:4px; background:none; font-size:13px; }
+  .arg:hover, .arg.on { border-color:var(--line); background:var(--lane); }
+  .arg code { font-family:ui-monospace,Menlo,Consolas,monospace; overflow-wrap:anywhere; } .arg .k { color:var(--muted); }
+  .chain { display:block; font-size:12px; } .o-user{color:var(--user)} .o-read{color:var(--read)} .o-new{color:var(--new)} .o-untraced{color:var(--untraced)}
   .reason { color:var(--muted); font-size:13px; margin-top:6px; }
-  details { margin-top:6px; font-size:13px; } pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:6px 0 0; color:var(--muted); max-height:180px; overflow:auto; }
-  .actions { margin-top:10px; display:flex; gap:8px; } .approve{ border-color:var(--ok); color:var(--ok);} .deny{ border-color:var(--deny); color:var(--deny);}
-  .outcome { display:grid; grid-template-columns:1fr 1fr; gap:12px; } @media (max-width:640px){ .outcome{ grid-template-columns:1fr; } }
-  .big { font-size:17px; font-weight:600; } .good{color:var(--ok)} .bad{color:var(--deny)}
-  .legend { font-size:12px; color:var(--muted); margin-top:8px; } .legend b { font-weight:600; }
+  .actions { margin-top:10px; display:flex; gap:8px; } .approve{ border-color:var(--user); color:var(--user);} .deny{ border-color:var(--deny); color:var(--deny);}
+  .outcome { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .big { font-size:16px; font-weight:600; } .good{color:var(--user)} .bad{color:var(--deny)}
   .note { font-size:12px; color:var(--muted); }
 </style>
 </head>
 <body>
 <main>
   <h1>Kavach</h1>
-  <p class="sub">A reviewer checks every action an AI agent wants to take: did its details come from you, or from something the agent read?</p>
+  <p class="sub">When agents pass work to each other, nobody remembers where a detail came from. Kavach keeps a graph of what every agent was told, read and sent, and traces each detail of an action back to its source before the action runs.</p>
 
   <div class="card">
     <div class="row">
       <div><label for="suite">Area</label><select id="suite"></select></div>
-      <div><label for="guard">Guard</label>
+      <div><label for="guard">Guard on the executor agent</label>
         <select id="guard">
-          <option value="anchored">Kavach, anchored (ask when nothing in the action came from the user)</option>
-          <option value="strict">Kavach, strict (ask when anything came only from what the agent read)</option>
+          <option value="graph_anchored">Kavach graph, anchored</option>
+          <option value="graph_strict">Kavach graph, strict</option>
+          <option value="trust_peers">Per-agent guard that trusts colleagues</option>
+          <option value="distrust_peers">Per-agent guard that distrusts colleagues</option>
           <option value="off">Off</option>
         </select></div>
     </div>
-    <label for="task">What the user asks the agent to do</label><select id="task"></select>
-    <label for="goal">Attack hidden in what the agent reads</label><select id="goal"></select>
+    <label for="task">What the user asks the team to do</label><select id="task"></select>
+    <label for="goal">Attack hidden in what the researcher reads</label><select id="goal"></select>
     <div class="actions"><button class="primary" id="run">Run</button></div>
-    <p class="note">The agent here is the AgentDojo benchmark's reference solution, and under attack it obeys the hidden instruction completely. Tools really run against the benchmark's environment, and "task completed" and "attack succeeded" are the benchmark's own checks.</p>
+    <p class="note">Three scripted agents: a coordinator delegates, a researcher reads, an executor acts. They follow the AgentDojo benchmark's reference solutions, and under attack the coordinator obeys the hidden instruction. No language model is involved. Tools really run, and the outcome is the benchmark's own check.</p>
   </div>
 
   <div id="out"></div>
@@ -67,79 +78,119 @@
 <script>
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-let catalog = {}, human = [];
+const svg = (tag, attrs, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+const LANES = ['user', 'coordinator', 'researcher', 'executor'];
+const WORDS = { user:'from the user', read:'from tool output', new:'made up by an agent', untraced:'not traced' };
+let catalog = {}, human = [], last = null;
 
-function fill(select, items, label) {
-  select.replaceChildren(...items.map(i => { const o = el('option', null, label(i)); o.value = i.id; return o; }));
-}
+function fill(select, items, label) { select.replaceChildren(...items.map(i => { const o = el('option', null, label(i)); o.value = i.id; return o; })); }
+const short = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
 function onSuite() {
   const s = catalog[$('suite').value];
-  fill($('task'), s.user_tasks, t => t.prompt.length > 140 ? t.prompt.slice(0, 140) + '…' : t.prompt);
-  fill($('goal'), [{id:'', goal:'No attack'}, ...s.attacker_goals], g => g.goal.length > 140 ? g.goal.slice(0, 140) + '…' : g.goal);
+  fill($('task'), s.user_tasks, t => short(t.prompt, 150));
+  fill($('goal'), [{id:'', goal:'No attack'}, ...s.attacker_goals], g => short(g.goal, 150));
   if (s.attacker_goals.length) $('goal').value = s.attacker_goals[0].id;
 }
 async function run() {
   $('run').disabled = true;
   const body = { suite:$('suite').value, user_task:$('task').value, attacker_goal:$('goal').value, guard:$('guard').value, human };
-  const r = await (await fetch('/api/run', { method:'POST', body:JSON.stringify(body) })).json();
-  $('run').disabled = false;
-  render(r);
+  last = await (await fetch('/api/run', { method:'POST', body:JSON.stringify(body) })).json();
+  $('run').disabled = false; render(last);
 }
-function start() { human = []; run(); }
-function answer(ok) { human.push(ok); run(); }
+const start = () => { human = []; run(); };
+const answer = ok => { human.push(ok); run(); };
 
-function render(r) {
+function drawGraph(r, highlight) {
+  const W = 620, rowH = 30, top = 44, laneW = W / LANES.length, x = a => LANES.indexOf(a) * laneW + laneW / 2;
+  const H = top + r.events.length * rowH + 16, g = svg('svg', { viewBox:`0 0 ${W} ${H}`, role:'img', 'aria-label':'Provenance graph across the agents' });
+  LANES.forEach((a, i) => { g.append(svg('rect', { class:'lane', x:i * laneW + 4, y:28, width:laneW - 8, height:H - 34, rx:8 }));
+    g.append(svg('text', { class:'lanehead', x:x(a), y:18, 'text-anchor':'middle' }, a)); });
+  const hl = highlight ? new Set(highlight.path) : new Set(), cls = highlight ? ' hl-' + highlight.origin : '';
+  r.events.forEach((e, i) => {
+    const y = top + i * rowH, to = x(e.agent), on = e.node != null && hl.has(e.node);
+    const grp = svg('g', { class:`k-${e.kind} ${e.who}` + (e.kind === 'action' && e.verdict !== 'allow' ? ' ask' : '') + (on ? cls : '') });
+    let label = '';
+    if (e.kind === 'user' || e.kind === 'message') {
+      const from = x(e.kind === 'user' ? 'user' : e.source);
+      g.append(svg('path', { class:'edge' + (on ? cls : ''), d:`M${from},${y} L${to},${y}`, 'marker-end':'url(#arr)' }));
+      grp.append(svg('circle', { class:'dot', cx:from, cy:y, r:3 }));
+      label = short(e.text.replace(/\s+/g, ' '), 30);
+      grp.append(svg('text', { class:'lbl', x:(from + to) / 2, y:y - 5, 'text-anchor':'middle' }, label));
+    } else if (e.kind === 'read') {
+      grp.append(svg('circle', { class:'dot', cx:to, cy:y, r:6 }));
+      const flip = e.agent === 'executor';
+      grp.append(svg('text', { class:'lbl', x:to + (flip ? -10 : 10), y:y + 4, 'text-anchor': flip ? 'end' : 'start' }, short('reads ' + e.source, 22)));
+    } else {
+      grp.append(svg('rect', { class:'dot', x:to - 7, y:y - 7, width:14, height:14, rx:3 }));
+      grp.append(svg('text', { class:'lbl', x:to - 12, y:y + 4, 'text-anchor':'end' }, short(e.tool, 22) + (e.verdict === 'allow' ? '' : '  (asked)')));
+    }
+    grp.append(svg('title', {}, e.text || e.tool));
+    g.append(grp);
+  });
+  const defs = svg('defs', {}), m = svg('marker', { id:'arr', viewBox:'0 0 10 10', refX:9, refY:5, markerWidth:6, markerHeight:6, orient:'auto' });
+  m.append(svg('path', { d:'M0,0 L10,5 L0,10 z', fill:'currentColor', opacity:.6 })); defs.append(m); g.prepend(defs);
+  return g;
+}
+
+function chain(r, t) {
+  if (t.origin === 'untraced') return 'too short to trace';
+  const hops = t.path.map(id => r.events.find(e => e.node === id)).map(e => e.kind === 'message' ? `message from ${e.source}` : e.kind === 'read' ? `${e.agent} read it from ${e.source}` : 'the user\'s request');
+  if (t.origin === 'new') hops.push(`first written by ${t.composed_by}`);
+  return hops.join('  ←  ');
+}
+
+function render(r, pick) {
   const out = $('out'); out.replaceChildren();
   if (r.error) { out.append(el('div', 'card', r.error)); return; }
+  const actions = r.events.filter(e => e.kind === 'action');
+  if (!pick) { // default highlight: the argument that caused the latest ask, else the last traced argument
+    for (const a of actions) for (const [k, t] of Object.entries(a.traces)) if (t.path.length && (!pick || t.origin === 'read')) pick = { a, k };
+  }
   const intro = el('div', 'card');
   intro.append(el('label', null, 'User request'), el('div', 'quote', r.user_request));
-  if (r.injected_text) intro.append(el('label', null, 'Hidden in the data the agent reads'), el('div', 'quote bad', r.injected_text.trim()));
+  if (r.injected_text) intro.append(el('label', null, 'Hidden in the data the researcher reads'), el('div', 'quote bad', r.injected_text.trim().replace(/\n+/g, ' ')));
   out.append(intro);
 
-  r.steps.forEach((s, i) => {
-    const waiting = r.pending && i === r.steps.length - 1;
+  const cols = el('div', 'cols'), left = el('div', 'card'), right = el('div');
+  left.append(el('label', null, 'Provenance graph (time runs downward)'));
+  const wrap = el('div', 'graphwrap'); wrap.append(drawGraph(r, pick ? pick.a.traces[pick.k] : null)); left.append(wrap);
+  left.append(el('div', 'note', 'Arrows are messages, circles are tool outputs, squares are actions. Click an argument on the right to see where it came from.'));
+
+  actions.forEach((s, i) => {
+    const waiting = r.pending && s === r.events[r.events.length - 1];
     const card = el('div', 'card step ' + s.who + (s.verdict !== 'allow' ? ' ask' : ''));
     const head = el('div', 'head');
-    head.append(el('span', 'tool', s.tool));
-    head.append(el('span', 'tag t-' + s.who, s.who === 'attacker' ? 'injected action' : 'task step'));
-    if (!s.changes_state) head.append(el('span', 'tag t-read', 'read only'));
-    else head.append(el('span', 'tag t-' + s.verdict, s.verdict === 'allow' ? 'allowed' : 'ask the human'));
+    head.append(el('span', 'tool', s.tool), el('span', 'tag t-' + s.who, s.who === 'attacker' ? 'injected action' : 'task step'));
+    head.append(el('span', 'tag t-' + s.verdict, s.verdict === 'allow' ? 'allowed' : 'ask the human'));
     if (s.human) head.append(el('span', 'tag t-' + s.human, s.human));
     card.append(head);
-    const keys = Object.keys(s.origins);
-    if (keys.length) {
-      const table = el('table');
-      keys.forEach(k => { const tr = el('tr'); const v = k.split(/[.\[\]]+/).filter(Boolean).reduce((a, p) => a?.[p], s.args);
-        tr.append(el('td', 'k', k), el('td', 'v', String(v).length > 160 ? String(v).slice(0, 160) + '…' : String(v)));
-        const o = el('td', 'o-' + s.origins[k], { user:'from the user', read:'from what the agent read', new:'composed by the agent', untraced:'not traced' }[s.origins[k]]);
-        tr.append(o); table.append(tr); });
-      card.append(table);
-    }
-    if (s.changes_state && r.guard !== 'off') card.append(el('div', 'reason', s.reason));
-    if (s.executed && s.output) { const d = el('details'); d.append(el('summary', null, 'Tool output'), el('pre', null, s.output)); card.append(d); }
-    if (waiting) {
-      const a = el('div', 'actions'); const y = el('button', 'approve', 'Approve'), n = el('button', 'deny', 'Deny');
-      y.onclick = () => answer(true); n.onclick = () => answer(false); a.append(y, n); card.append(a);
-    }
-    out.append(card);
+    Object.entries(s.traces).forEach(([k, t]) => {
+      const v = k.split(/[.\[\]]+/).filter(Boolean).reduce((a, p) => a?.[p], s.args);
+      const b = el('button', 'arg' + (pick && pick.a === s && pick.k === k ? ' on' : ''));
+      const line = el('span'); line.append(el('span', 'k', k + ': '), el('code', null, short(String(v), 90)));
+      b.append(line, el('span', 'chain o-' + t.origin, WORDS[t.origin] + (t.path.length || t.origin === 'new' ? ':  ' + chain(r, t) : '')));
+      b.onclick = () => render(r, { a:s, k }); card.append(b);
+    });
+    if (r.guard !== 'off') card.append(el('div', 'reason', s.reason));
+    if (waiting) { const a = el('div', 'actions'), y = el('button', 'approve', 'Approve'), n = el('button', 'deny', 'Deny');
+      y.onclick = () => answer(true); n.onclick = () => answer(false); a.append(y, n); card.append(a); }
+    right.append(card);
   });
+  if (!actions.length) right.append(el('div', 'card reason', 'This task needs no state-changing action, so nothing was reviewed.'));
 
   if (r.outcome) {
-    const card = el('div', 'card'); const grid = el('div', 'outcome');
+    const card = el('div', 'card'), grid = el('div', 'outcome');
     const side = (title, o) => { const d = el('div'); d.append(el('label', null, title));
       d.append(el('div', 'big ' + (o.task_done ? 'good' : 'bad'), o.task_done ? 'User task completed' : 'User task not completed'));
       if (o.attack_succeeded !== null) d.append(el('div', 'big ' + (o.attack_succeeded ? 'bad' : 'good'), o.attack_succeeded ? 'Attack succeeded' : 'Attack did not succeed'));
       return d; };
-    const mine = side(r.guard === 'off' ? 'This run (guard off)' : 'This run, with Kavach', r.outcome);
+    const mine = side(r.guard === 'off' ? 'This run (guard off)' : 'This run', r.outcome);
     mine.append(el('div', 'reason', r.outcome.asks + ' ask(s) to the human'));
-    grid.append(mine, side('Same scenario with no guard', r.without_guard));
-    card.append(grid);
-    if (r.attacker_goal && r.injection_read === false) card.append(el('div', 'reason', 'The step that would have shown the hidden text to the agent was denied, so the agent never read it.'));
-    out.append(card);
-  } else {
-    out.append(el('div', 'card reason', 'Waiting for your answer above.'));
-  }
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    grid.append(mine, side('Same scenario, no guard', r.without_guard)); card.append(grid);
+    if (r.attacker_goal && r.injection_read === false) card.append(el('div', 'reason', 'The step that would have shown the hidden text to the team was denied, so nobody read it.'));
+    right.append(card);
+  } else right.append(el('div', 'card reason', 'Waiting for your answer above.'));
+  cols.append(left, right); out.append(cols);
 }
 
 fetch('/api/catalog').then(r => r.json()).then(c => {

@@ -1,10 +1,10 @@
-# Who Said That? Tracing Argument Provenance to Gate Agent Actions Without a Model
+# Who Said That? A Provenance Graph for Gating Actions in Multi-Agent Systems Without a Model
 
-*Draft. Every number below comes from the two scripts in `v2/experiments/` and can be reproduced without an API key. Sections marked TODO are not done.*
+*Draft. Every number below comes from the three scripts in `v2/experiments/` and can be reproduced without an API key. Sections marked TODO are not done.*
 
 ## Abstract
 
-AI agents that read untrusted content can be steered by instructions hidden in it. Many defenses put a second model in front of the agent's tool calls, which adds cost and a second target for the same attack. We ask how far a guard can get with no model at all. Kavach is a thin layer that reviews each state-changing tool call by tracing where its argument values came from: the user's request, something the agent read, or neither. It allows, or asks the human. It has no list of dangerous tools, commands or patterns. On the reference runs of AgentDojo (97 user tasks, 609 task and attack pairs), with every ask treated as a denial, Kavach's anchored mode reduces attack success from 97% to 8% while 84% of honest tasks still complete. Asking before every state change gives 0% attack success but interrupts 64% of honest tasks; the anchored mode interrupts 19%. These results use the benchmark's reference solutions as the agent, not a language model, and a non-adaptive attacker; we state what that does and does not establish.
+AI agents that read untrusted content can be steered by instructions hidden in it. Many defenses put a second model in front of the agent's tool calls, which adds cost and a second target for the same attack. We ask how far a guard can get with no model at all. Kavach is a thin layer that reviews each state-changing tool call by tracing where its argument values came from: the user's request, something the agent read, or neither. It allows, or asks the human. It has no list of dangerous tools, commands or patterns. On the reference runs of AgentDojo (97 user tasks, 609 task and attack pairs), with every ask treated as a denial, Kavach's anchored mode reduces attack success from 97% to 8% while 84% of honest tasks still complete. Asking before every state change gives 0% attack success but interrupts 64% of honest tasks; the anchored mode interrupts 19%. In a three-agent version of the same tasks, a per-agent guard that trusts messages from colleagues stops nothing (97% attack success), one that distrusts them completes only 42% of honest tasks, and tracing provenance across the agents' messages recovers the single-agent result. These results use the benchmark's reference solutions as the agent, not a language model, and a non-adaptive attacker; we state what that does and does not establish.
 
 ## 1. Introduction
 
@@ -14,11 +14,14 @@ A common defense is a judge model that inspects each tool call. A judge reads th
 
 We study a much smaller intervention: a layer between the agent and its tools that needs no model, no change to the agent, and no knowledge of attacks. It asks one question of each action: *did the details of this action come from the user?*
 
+The problem is sharper when several agents cooperate. An agent that receives "pay account X" from a colleague cannot tell whether X came from the user or from a page the colleague read. A guard that sees only its own agent must either trust colleagues, and inherit whatever they were tricked by, or distrust them, and question every delegated action.
+
 Contributions:
 
 1. A model-free reviewer that traces each argument of a tool call to the user's request, to tool output, or to neither, and two decision rules built on it (Section 3).
-2. A measurement on AgentDojo's reference runs of the trade-off between attack success, honest task completion and how often the human is interrupted, with the interruption rate reported as a first-class result (Section 5).
-3. An account of exactly where the approach fails (Section 6).
+2. A provenance graph that extends the tracing across messages between agents, so an action is judged by where its values entered the system, not by which agent asked for it (Section 3).
+3. A measurement on AgentDojo's reference runs of the trade-off between attack success, honest task completion and how often the human is interrupted, with the interruption rate reported as a first-class result (Section 5).
+4. An account of exactly where the approach fails (Section 6).
 
 ## 2. Threat model
 
@@ -44,7 +47,9 @@ Text is matched as a whole value, case-insensitively, and not inside a longer wo
 - *Strict*: ask the human if any argument has origin *read*.
 - *Anchored*: ask only if some argument has origin *read* and none has origin *user*. If the user named part of the action, the action is treated as tied to their request.
 
-A reviewer that fails produces an ask, never an allow. The whole guard is under 200 lines of Python with no dependencies.
+**Across agents.** Kavach records three kinds of event in a graph: the user gives an agent a request, an agent receives a tool output, and an agent sends another agent a message. To trace a value held by an agent, it looks through that agent's context. If the value arrived in a message, it repeats the search in the sender's context as it stood when the message was sent, and so on. A path that ends at the user's request gives origin *user*; one that ends at a tool output gives *read*; if neither, the value is *new* and attributed to the agent furthest back that passed it on. Because a message can only carry what its sender already knew, the search always terminates. The same two decision rules are then applied.
+
+A reviewer that fails produces an ask, never an allow. The whole guard, including the graph, is about 300 lines of Python with no dependencies.
 
 The matching rule, the three-character minimum and both decision rules were fixed before the experiments were run and were not changed afterwards.
 
@@ -87,7 +92,23 @@ Per suite, anchored mode: attack success is 0 / 144 in banking, 1 / 120 in trave
 
 Task completion under attack is low without a guard (39%) because the fully obedient agent's injected actions often break the user's task; the guard raises it by stopping them.
 
+### 5.3 A team of three agents (`team_replay.py`)
+
+Each scenario is carried out by a coordinator that holds the user's request and delegates, a researcher that runs read-only tools and reports their output, and an executor that runs state-changing tools. The guard sits on the executor. Unattended, scored by the benchmark.
+
+| Guard on the executor | Honest tasks with an ask | Task done, no attack | Attack succeeded |
+|---|---|---|---|
+| None | 0 / 97 (0%) | 97 / 97 (100%) | 593 / 609 (97%) |
+| Per-agent, trusts colleagues | 0 / 97 (0%) | 97 / 97 (100%) | 593 / 609 (97%) |
+| Per-agent, distrusts colleagues | 59 / 97 (61%) | 41 / 97 (42%) | 40 / 609 (7%) |
+| Graph, strict | 38 / 97 (39%) | 63 / 97 (65%) | 44 / 609 (7%) |
+| Graph, anchored | 18 / 97 (19%) | 81 / 97 (84%) | 46 / 609 (8%) |
+
+The per-agent guards use the same tracing rule but see only the executor's own context. The graph results equal the single-agent results of Section 5.2: delegation through two other agents costs nothing when values are passed on unchanged.
+
 ## 6. Where it fails
+
+- **Paraphrase between agents.** In the team experiment the researcher reports tool output word for word and the coordinator copies values into its instructions, so the graph result holds by construction for verbatim passing. Real agents summarise and reword. A value that changes form between agents is no longer traced and appears as *new*.
 
 - **Short values.** 40 of the 46 strict-mode misses are one workspace goal, "delete the file with ID '13'". A two-character ID is untraced, so the call is allowed.
 - **Composed values.** If the injection makes the agent build a value rather than copy it (for example a link placed inside a longer message body), the value is *new*, not *read*, and is not flagged. An attacker who knows the guard can aim for this. We have not run an adaptive attack, and recent work shows that defenses evaluated only on fixed attacks are routinely broken by adaptive ones [5].
@@ -102,7 +123,7 @@ TODO: this section needs a proper reading of each paper before submission. Paper
 
 ## 8. Future work
 
-1. Run with real agents (a local open model is enough) on AgentDojo and AgentDyn.
+1. Run with real agents (a local open model is enough), single and multi-agent, on AgentDojo and AgentDyn, to measure how much paraphrase between agents breaks the tracing.
 2. An adaptive attacker that targets composed values and anchoring.
 3. Compare against a single judge model given the same information.
 4. Trace values through simple transformations (substrings, concatenation) to close the composed-value gap.
