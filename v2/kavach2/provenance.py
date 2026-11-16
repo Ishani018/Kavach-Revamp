@@ -46,7 +46,19 @@ def contains(value: Any, text: str) -> bool:
 
 
 def traceable(value: Any) -> bool:
-    return value is not None and not isinstance(value, bool) and len(str(value).strip()) >= MIN_TRACEABLE_CHARS
+    """Is this value specific enough that finding it in a text means something?
+
+    Not traced: booleans, empty values, values shorter than three characters, and a single lowercase word
+    ("summary", "general"), which turns up in ordinary text by coincidence. The single-word rule was added
+    after the first gateway test held an honest email for its subject "summary"; the benchmark results
+    before and after are both reported in the README.
+    """
+    if value is None or isinstance(value, bool):
+        return False
+    text = str(value).strip()
+    if len(text) < MIN_TRACEABLE_CHARS:
+        return False
+    return not (isinstance(value, str) and text.isalpha() and text.islower())
 
 
 def origin_of(value: Any, session: Session) -> Origin:

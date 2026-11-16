@@ -626,7 +626,9 @@ def test_pre_compact_is_recorded_and_never_blocks(tmp_path: Path) -> None:
 
 
 def test_hook_config_registers_every_supported_event() -> None:
-    config = json.loads((ROOT / ".github" / "hooks" / "kavach.json").read_text(encoding="utf-8"))
+    # The legacy hook set is kept in hooks-legacy; .github/hooks now registers only the v2 prompt hook,
+    # because the legacy PreToolUse hook denies every tool call when the old local API is not running.
+    config = json.loads((ROOT / ".github" / "hooks-legacy" / "kavach.json").read_text(encoding="utf-8"))
     assert set(config["hooks"]) == {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
                                     "SubagentStart", "SubagentStop", "PreCompact", "Stop"}
 

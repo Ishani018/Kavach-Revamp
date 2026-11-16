@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kavach"
+version = "0.2.0"
+description = "A gateway that checks where an AI agent's actions got their details from, before they run."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+experiments = ["agentdojo==0.1.35"]
+dev = ["pytest>=8.0", "agentdojo==0.1.35"]
+
+[project.scripts]
+kavach-gateway = "kavach2.gateway.__main__:main"
+
+[tool.setuptools]
+packages = ["kavach2", "kavach2.gateway"]
+
+[tool.setuptools.package-data]
+"kavach2.gateway" = ["dashboard.html"]

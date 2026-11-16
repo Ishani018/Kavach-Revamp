@@ -55,6 +55,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const svg = (tag, attrs, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
 const short = (s, n) => s.length > n ? s.slice(0, n) + '…' : s;
 const WORDS = { user:'from you', read:'from tool output', new:'written by the agent', untraced:'not traced' };
+// A value traced to the user's prompt has no tool source to list.
 let state = null, pick = null, lastKey = '';
 const api = (path, body) => fetch(path, { method: body ? 'POST' : 'GET', headers:{ 'X-Kavach-Token':token }, body: body ? JSON.stringify(body) : undefined }).then(r => r.json());
 const dig = (args, path) => path.split(/[.\[\]]+/).filter(Boolean).reduce((a, p) => a?.[p], args);
@@ -86,8 +87,8 @@ function drawGraph(calls, sel) {
 
 function render() {
   $('servers').replaceChildren(...state.servers.map(s => el('span', 'chip', `${s.name} · ${s.tools} tools` + (s.trusted ? ' · trusted source' : ''))));
-  const calls = state.events.filter(e => e.tool);
-  if (!calls.length) return;
+  const calls = state.events.filter(e => e.tool), prompts = state.events.filter(e => e.prompt);
+  if (!calls.length && !prompts.length) return;
   if (!pick || !calls.find(e => e.id === pick.id)) { pick = null; // default: the value behind the latest ask
     for (const e of calls) for (const [k, t] of Object.entries(e.traces)) if (t.origin === 'read') pick = { id:e.id, k }; }
   const selEvent = pick && calls.find(e => e.id === pick.id), sel = selEvent ? { e:selEvent, t:selEvent.traces[pick.k] } : null;
@@ -115,7 +116,10 @@ function render() {
       a.append(y, n); card.append(a); }
     right.append(card);
   });
-  cols.append(left, right); $('out').replaceChildren(cols);
+  cols.append(left, right);
+  const top = [];
+  if (prompts.length) { const c = el('div', 'card'); c.append(el('label', null, 'What you asked (reported by the editor hook)'), el('div', null, prompts[prompts.length - 1].prompt)); top.push(c); }
+  $('out').replaceChildren(...top, cols);
 }
 
 async function tick() {

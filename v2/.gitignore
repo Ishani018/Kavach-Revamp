@@ -1,3 +1,4 @@
 kavach-dashboard-url.txt
 demo_servers/outbox.jsonl
 __pycache__/
+*.egg-info/

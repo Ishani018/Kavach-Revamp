@@ -122,7 +122,8 @@ class Gateway:
         with self.lock:
             decision = self.graph.review(AGENT, action, self.mode)
             traces = {path: {"origin": t.origin.value,
-                             "sources": [self.graph.nodes[i].source for i in t.path],
+                             "sources": ["your prompt" if self.graph.nodes[i].kind == "user"
+                                         else self.graph.nodes[i].source for i in t.path],
                              "nodes": list(t.path)}
                       for path, t in self.graph.traces(AGENT, action).items()}
             event = {"id": len(self.events), "time": time.strftime("%H:%M:%S"), "server": server.name,

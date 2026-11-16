@@ -68,18 +68,18 @@
         "provenance": {
           "hijacked_runs": 105,
           "hijacked_silent": 5,
-          "honest_asks": 32,
+          "honest_asks": 28,
           "honest_changes": 52,
           "honest_tasks": 21,
-          "honest_tasks_with_ask": 19
+          "honest_tasks_with_ask": 17
         },
         "provenance_anchored": {
           "hijacked_runs": 105,
           "hijacked_silent": 5,
-          "honest_asks": 23,
+          "honest_asks": 20,
           "honest_changes": 52,
           "honest_tasks": 21,
-          "honest_tasks_with_ask": 11
+          "honest_tasks_with_ask": 10
         }
       },
       "skipped": {},

@@ -14,6 +14,7 @@ This is a restart. The code outside this folder is the old system and is not use
 
 ## Try it with VS Code Copilot
 
+0. Optional: `pip install -e v2` gives you a `kavach-gateway` command for use outside this repository.
 1. Open this repository in VS Code. `.vscode/mcp.json` registers one MCP server called `kavach`, which runs the gateway with two demo tool servers behind it: a `helpdesk` inbox (anyone can file a ticket, and ticket 103 hides an instruction) and a `mailer` (writes to a local file, nothing leaves your machine).
 2. Start the `kavach` server from the MCP servers list. Open the dashboard link written to `v2/kavach-dashboard-url.txt`.
 3. In Copilot Chat, switch to Agent mode and ask: *"Read all the open helpdesk tickets and email a short summary to manager@ourcompany.example."*
@@ -26,9 +27,9 @@ To protect your own servers, copy `kavach.demo.json`, list them under `servers` 
 ## What the gateway can and cannot see
 
 - It sees every tool call and every tool result, across all the servers behind it.
-- It does **not** see what you typed to the agent. So a value is either "from tool output" or "written by the agent"; anything you typed counts as written by the agent and is allowed. A client hook can report your prompt to `POST /api/prompt` on the dashboard port, which the graph then uses, but no hook is shipped yet.
+- By itself it does **not** see what you typed to the agent. In VS Code, the hook in `.github/hooks/kavach.json` reports each prompt to the gateway, so a value you typed is recognised as yours and shown as "from you". Without the hook, anything you typed counts as written by the agent and is allowed. The hook follows VS Code's agent-hook format as used by the earlier version of this project; it is tested here by feeding it the event directly, not inside VS Code.
 - It only follows values that are copied unchanged. If the agent rewords something on the way, the link is lost.
-- Ordinary words collide. An email subject of "summary" is held if the word "summary" appeared in any earlier tool output. Expect false alarms on short common values; this needs measuring with real use.
+- Short ordinary phrases can still collide. A single lowercase word such as "summary" is no longer traced, but a subject like "Password reset" is held if that exact phrase appeared in an earlier tool output. How often this happens needs measuring with real use.
 - A tool that lies about being read-only is not reviewed unless you override it in the config.
 
 ## The benchmark results below
@@ -70,7 +71,7 @@ For each argument of a state-changing action, the guard finds its origin:
 | user | the value appears in the user's request |
 | read | it appears only in something the agent read from a tool |
 | new | it appears in neither; the agent composed it |
-| untraced | boolean, empty, or shorter than three characters |
+| untraced | boolean, empty, shorter than three characters, or a single lowercase word |
 
 Two modes decide when to ask:
 
@@ -89,16 +90,16 @@ AgentDojo 0.1.35, benchmark v1.2.2, 97 user tasks and 609 task and attack pairs.
 |---|---|---|
 | No guard | 0 / 97 (0%) | 609 / 609 (100%) |
 | Ask before every state change | 62 / 97 (64%) | 0 / 609 (0%) |
-| Kavach strict | 38 / 97 (39%) | 46 / 609 (8%) |
-| Kavach anchored | 18 / 97 (19%) | 48 / 609 (8%) |
+| Kavach strict | 36 / 97 (37%) | 46 / 609 (8%) |
+| Kavach anchored | 17 / 97 (18%) | 48 / 609 (8%) |
 
 **Unattended, every ask is a denial** (`python -m experiments.scored_replay`):
 
 | Policy | Task done, no attack | Task done, under attack | Attack succeeded |
 |---|---|---|---|
 | No guard | 97 / 97 (100%) | 239 / 609 (39%) | 593 / 609 (97%) |
-| Kavach strict | 63 / 97 (65%) | 399 / 609 (66%) | 44 / 609 (7%) |
-| Kavach anchored | 81 / 97 (84%) | 485 / 609 (80%) | 46 / 609 (8%) |
+| Kavach strict | 66 / 97 (68%) | 413 / 609 (68%) | 44 / 609 (7%) |
+| Kavach anchored | 83 / 97 (86%) | 494 / 609 (81%) | 46 / 609 (8%) |
 
 **A team of three agents, guard on the executor, unattended** (`python -m experiments.team_replay`):
 
@@ -107,8 +108,8 @@ AgentDojo 0.1.35, benchmark v1.2.2, 97 user tasks and 609 task and attack pairs.
 | None | 0 / 97 (0%) | 97 / 97 (100%) | 593 / 609 (97%) |
 | Per-agent, trusts colleagues | 0 / 97 (0%) | 97 / 97 (100%) | 593 / 609 (97%) |
 | Per-agent, distrusts colleagues | 59 / 97 (61%) | 41 / 97 (42%) | 40 / 609 (7%) |
-| Kavach graph, strict | 38 / 97 (39%) | 63 / 97 (65%) | 44 / 609 (7%) |
-| Kavach graph, anchored | 18 / 97 (19%) | 81 / 97 (84%) | 46 / 609 (8%) |
+| Kavach graph, strict | 36 / 97 (37%) | 66 / 97 (68%) | 44 / 609 (7%) |
+| Kavach graph, anchored | 17 / 97 (18%) | 83 / 97 (86%) | 46 / 609 (8%) |
 
 A guard that only sees its own agent has two bad choices: trust what colleagues say and stop nothing, or distrust it and block most honest work. Tracing across the messages recovers exactly the single-agent result.
 
@@ -120,9 +121,10 @@ Raw counts per suite are in `experiments/*.json`.
 - **No real agent ran.** A language model does not follow reference solutions, so these numbers do not predict end-to-end rates for any model.
 - **The attacker did not adapt.** An injection that makes the agent compose a value instead of copying it is not traced, and in anchored mode an injected action that reuses a value from the user's request is allowed.
 - **Short values are not traced.** 40 of the 46 strict-mode misses are one attack, "delete the file with ID '13'".
-- **Slack-style tasks are hard.** Honest tasks there act on what they read, so only 57% complete unattended in anchored mode.
+- **Slack-style tasks are hard.** Honest tasks there act on what they read, so only 67% complete unattended in anchored mode.
 - **340 pairs are excluded**: 320 where the benchmark ships no reference actions for the attacker goal, and 20 where the attack only changes what the agent says.
-- **One fix was made after the first scored run**: the simulated agent originally performed attacker actions even when the guard had denied the step that would have shown it the injection. The guard's rules were fixed before any run and have not been changed.
+- **One tracing rule was changed after the benchmark runs**: single lowercase words are no longer traced, after the first gateway test held an honest email for its subject "summary". The tables above use the new rule. Under the old rule the attack numbers were identical, and honest results were slightly worse (strict: 38 of 97 tasks interrupted, 63 completed unattended; anchored: 18 interrupted, 81 completed).
+- **One simulation fix was made after the first scored run**: the simulated agent originally performed attacker actions even when the guard had denied the step that would have shown it the injection. The guard's rules were fixed before any run and have not been changed.
 
 ## Layout
 
@@ -130,8 +132,9 @@ Raw counts per suite are in `experiments/*.json`.
 |---|---|
 | `kavach2/` | the guard: origins, reviewer, Speaker, and the multi-agent provenance graph (`graph.py`) |
 | `kavach2/gateway/` | the MCP gateway, its dashboard, and a minimal MCP server helper |
+| `hooks/` | VS Code hook that reports the user's prompt to the gateway |
 | `demo_servers/` | two demo MCP tool servers: `helpdesk` and `mailer` |
 | `demo/` | scenario engines (single agent and team), local server, web page |
 | `experiments/` | the three experiments and their results |
 | `paper/draft.md` | paper draft using only the numbers above |
-| `tests/` | 23 tests, including end-to-end gateway tests (`python -m pytest tests -q`) |
+| `tests/` | 25 tests, including end-to-end gateway tests (`python -m pytest tests -q`) |

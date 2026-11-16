@@ -1,5 +1,7 @@
 # Kavach MVP
 
+> **Kavach has been rebuilt.** The current project is in [`v2/`](v2/README.md): an MCP gateway that checks where an agent's actions got their details from. Everything below describes the earlier system, which is kept for reference and is no longer developed. The VS Code hook configuration in `.github/hooks/` now points at v2.
+
 A small, local security check for LLM agent tool calls. You submit a proposed tool call; Kavach runs four detectors ("ministers") on it and a "Speaker" combines them into one verdict: **BLOCK**, **ESCALATE** (ask a human), or **ALLOW**.
 
 This is the extracted working core of the research project. NAVIGATOR runtime work is isolated on `navigator-invariant-runtime` and is not deployed or production-ready.

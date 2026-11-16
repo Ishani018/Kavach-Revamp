@@ -45,10 +45,10 @@
     "slack": {
       "attack_succeeded": 3,
       "attacked": 105,
-      "attacked_done": 60,
+      "attacked_done": 69,
       "honest": 21,
-      "honest_done": 12,
-      "honest_interrupted": 11
+      "honest_done": 14,
+      "honest_interrupted": 10
     },
     "travel": {
       "attack_succeeded": 1,
@@ -79,10 +79,10 @@
     "slack": {
       "attack_succeeded": 3,
       "attacked": 105,
-      "attacked_done": 35,
+      "attacked_done": 49,
       "honest": 21,
-      "honest_done": 4,
-      "honest_interrupted": 19
+      "honest_done": 7,
+      "honest_interrupted": 17
     },
     "travel": {
       "attack_succeeded": 1,

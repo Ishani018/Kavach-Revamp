@@ -101,3 +101,26 @@ def test_dashboard_api_refuses_requests_without_the_token(gw):
     req = urllib.request.Request(gw.base + "/api/answer", data=b'{"id":0,"approve":true}')
     with pytest.raises(urllib.error.HTTPError):
         urllib.request.urlopen(req, timeout=5)
+
+
+def test_prompt_hook_tells_the_gateway_what_the_user_typed(gw, tmp_path):
+    url_file = tmp_path / "url.txt"
+    hook = os.path.join(ROOT, "hooks", "prompt_hook.py")
+    event = {"hook_event_name": "UserPromptSubmit", "session_id": "s1",
+             "prompt": "Reply to priya@northwind.example about invoice INV-2291"}
+    out = subprocess.run([sys.executable, hook], input=json.dumps(event), capture_output=True, text=True,
+                         env=dict(os.environ, KAVACH_DASHBOARD_URL_FILE=str(url_file)), timeout=20)
+    assert json.loads(out.stdout) == {"continue": True}
+    gw.call("helpdesk_read_ticket", ticket_id=101)  # the same address also appears in this ticket
+    sent = gw.call("mailer_send_email", to="priya@northwind.example", subject="Re: INV-2291", body="Fixed.")
+    assert not sent["isError"]
+    event = gw.api("/api/state")["events"][-1]
+    assert event["traces"]["to"]["origin"] == "user" and event["traces"]["to"]["sources"] == ["your prompt"]
+
+
+def test_prompt_hook_does_nothing_when_the_gateway_is_not_running(tmp_path):
+    hook = os.path.join(ROOT, "hooks", "prompt_hook.py")
+    out = subprocess.run([sys.executable, hook], input='{"hook_event_name":"UserPromptSubmit","prompt":"hi"}',
+                         capture_output=True, text=True,
+                         env=dict(os.environ, KAVACH_DASHBOARD_URL_FILE=str(tmp_path / "missing.txt")), timeout=20)
+    assert out.returncode == 0 and json.loads(out.stdout) == {"continue": True}
