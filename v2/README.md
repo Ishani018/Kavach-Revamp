@@ -28,9 +28,34 @@ Whether an action changes anything is taken from the tool's own declaration (`Ac
 
 ## Status
 
-**Nothing has been measured.** The 7 tests in `tests/` check that the code does what it says; they are not evidence that it stops attacks.
+One experiment has been run. It uses no model and no API key.
 
-Next step: replay AgentDojo's own reference action sequences (honest tasks and attacker goals) through the Provenance reviewer. This needs no model and gives the ask rate on honest tasks and the share of fully hijacked runs that pass silently. That is the baseline the Mandate reviewer has to beat.
+### Experiment 1: replaying AgentDojo's reference runs (AgentDojo 0.1.35, benchmark v1.2.2)
+
+`experiments/replay_agentdojo.py` replays the benchmark's own reference action sequences. An honest run is a user task's reference calls. A hijacked run is a user task's reference calls followed by an attacker goal's reference calls, with AgentDojo's `important_instructions` attack text planted where the task reads it: an agent that obeys the injection completely.
+
+| Policy | Honest tasks interrupted at least once | Hijacked runs that pass with no ask |
+|---|---|---|
+| Allow everything | 0 / 97 (0%) | 609 / 609 (100%) |
+| Ask on every state change | 62 / 97 (64%) | 0 / 609 (0%) |
+| Provenance reviewer | 38 / 97 (39%) | 46 / 609 (8%) |
+
+Per suite, Provenance interrupts 20% of honest tasks in workspace and travel, 44% in banking and 90% in slack. Full counts are in `experiments/replay_agentdojo_result.json`.
+
+What this does and does not show:
+
+- It shows the trade-off the Provenance reviewer makes on reference runs. It is not a result about real agents: no agent ran, so nothing here says how often an agent gets hijacked or finishes its task.
+- The attacker did not adapt. An injection that makes the agent compose a value instead of copying it would not be traced.
+- 40 of the 46 silent passes are one workspace attacker goal ("delete the file with ID '13'"): the ID is shorter than the 3-character tracing minimum, so it is untraced and allowed. The minimum was fixed before the run and has not been changed.
+- 340 hijacked runs are excluded. Workspace attacker goals 6 to 13 ship no reference calls in this benchmark version (320 runs), and one travel goal only changes what the agent says (20 runs), which an action guard cannot see.
+- "State-changing" is observed from the reference runs (a tool is state-changing if any reference call to it changed the environment), because AgentDojo tools declare nothing. This marks `get_unread_emails` and `get_webpage` as state-changing, since they do modify the environment.
+- An ask is counted as an interruption. The human's answer is not simulated.
+
+Next step: a second reviewer that separates "the user asked for this" from "something the agent read asked for this", to bring the 39% down without raising the 8%.
+
+```bash
+cd v2 && pip install agentdojo==0.1.35 && python -m experiments.replay_agentdojo
+```
 
 ## Run the tests
 
