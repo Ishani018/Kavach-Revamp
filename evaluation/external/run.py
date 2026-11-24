@@ -43,7 +43,7 @@ def calls_for(case: Case, shape: str, terminal_tool: str, write_tool: str) -> Li
     ext = "sh" if case.language == "bash" else "py"
     runner = "bash" if case.language == "bash" else "python3"
     if shape == "inline":
-        command = case.code if case.language == "bash" else f"python3 - <<'KAVACH_EOF'\n{case.code}\nKAVACH_EOF"
+        command = case.code if case.language == "bash" else f"python3 - <<'PY_EOF'\n{case.code}\nPY_EOF"
         return [{"tool_name": terminal_tool, "arguments": {"command": command}}]
     path = f"/workspace/task.{ext}"
     return [{"tool_name": write_tool, "arguments": {"filePath": path, "content": case.code}},

@@ -611,6 +611,13 @@ def check_vault(call: ParsedCall) -> MinisterScan | None:
         dialect = toolshape.shell_dialect(call.tool)
         if dialect in _AST_FAST_DIALECTS:
             matched, evidence, used_ast = ast_parse.has_credential_path(text, dialect)
+            if not matched and _HEREDOC_OPEN.search(text):
+                for part in _script_commands(text):
+                    if _HEREDOC_OPEN.search(part):
+                        matched, evidence = struct_parse.has_credential_path(part.split("\n", 1)[-1])
+                        used_ast = False
+                        if matched:
+                            break
         else:
             matched, evidence = struct_parse.has_credential_path(text)
             used_ast = False
@@ -705,7 +712,11 @@ EXECUTOR_DENYLIST: list[tuple[str, re.Pattern, str]] = [
      "MITRE ATT&CK T1574.006"),
     ("pythonpath-hijack",
      # corpus provenance: EXEC-010 (python_import_hijack)
-     re.compile(r"sys\.path\.insert\(0,|PYTHONPATH\s*="),
+     # Putting a world-writable or remote directory first on the import path.
+     # A bare sys.path.insert(0, ...) of a project directory is how most test
+     # and build scripts find their own package, so that alone does not match.
+     re.compile(r"sys\.path\.insert\(\s*0\s*,\s*[rbu]?['\"](?:/tmp|/var/tmp|/dev/shm|https?:|\\\\)"
+                r"|PYTHONPATH\s*=\s*['\"]?(?:/tmp|/var/tmp|/dev/shm)"),
      "MITRE ATT&CK T1574.007"),
     ("xargs-shell-exec",
      # corpus provenance: EXEC-013 (xargs_injection)
@@ -1106,6 +1117,37 @@ def _check_executor_ast(text: str) -> MinisterScan | None:
     return None
 
 
+_SCRIPT_SEPARATOR = re.compile(r"\|\||&&|[;\n]")
+
+
+_HEREDOC_OPEN = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?")
+
+
+def _script_commands(text: str) -> list[str]:
+    """The commands of a shell script, one per element. Pipelines stay whole,
+    and a here-document stays with the command that reads it, so a program
+    passed on standard input is still checked as one piece."""
+    if "\n" not in text and ";" not in text and "&&" not in text:
+        return [text]
+    chunks: list[str] = []
+    lines = text.replace("\\\n", " ").split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        opened = _HEREDOC_OPEN.search(line)
+        if opened:
+            body = [line]
+            i += 1
+            while i < len(lines) and lines[i].strip() != opened.group(1):
+                body.append(lines[i])
+                i += 1
+            chunks.append("\n".join(body))
+        else:
+            chunks.extend(c for c in _SCRIPT_SEPARATOR.split(line) if c.strip())
+        i += 1
+    return chunks or [text]
+
+
 def check_executor(call: ParsedCall) -> MinisterScan | None:
     values = _flatten_arg_values(call.args)
     haystacks = [call.tool] + values
@@ -1137,6 +1179,13 @@ def check_executor(call: ParsedCall) -> MinisterScan | None:
         ast_hit = _check_executor_ast(text)
         if ast_hit is not None:
             return ast_hit
+        if _HEREDOC_OPEN.search(text):
+            # `python3 - <<EOF ... EOF`: the body is the Python program.
+            for part in _script_commands(text):
+                if _HEREDOC_OPEN.search(part):
+                    ast_hit = _check_executor_ast(part.split("\n", 1)[-1])
+                    if ast_hit is not None:
+                        return ast_hit
 
     # Structural fallback (E1 network-fetch-to-disk): a URL/remote-host source
     # AND a disk-write destination in the same call, regardless of tool, flag
@@ -1145,11 +1194,23 @@ def check_executor(call: ParsedCall) -> MinisterScan | None:
     # independently in test_struct_parse.py.
     for text in values:
         dialect = toolshape.shell_dialect(call.tool)
-        if dialect in _AST_FAST_DIALECTS:
-            matched, evidence, used_ast = ast_parse.is_network_fetch_to_disk(text, dialect)
-        else:
-            matched, evidence = struct_parse.is_network_fetch_to_disk(text)
-            used_ast = False
+        matched, evidence, used_ast = False, None, False
+        # The rule is "one command fetches from the network and writes to
+        # disk". In a multi-line script, a URL on one line and a redirect on
+        # another are two unrelated commands, so each command is checked alone.
+        for part in (_script_commands(text) if dialect in _AST_FAST_DIALECTS else [text]):
+            if dialect in _AST_FAST_DIALECTS:
+                matched, evidence, used_ast = ast_parse.is_network_fetch_to_disk(part, dialect)
+                if not matched and _HEREDOC_OPEN.search(part):
+                    # The shell grammar keeps a here-document's body out of the
+                    # command's words. When that body is a program, it is
+                    # checked as text, the way a written script file is.
+                    matched, evidence = struct_parse.is_network_fetch_to_disk(part.split("\n", 1)[-1])
+                    used_ast = False
+            else:
+                matched, evidence = struct_parse.is_network_fetch_to_disk(part)
+            if matched:
+                break
         if matched:
             return MinisterScan(
                 minister="EXECUTOR",

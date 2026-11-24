@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from . import deobfuscate, prefilters, scan_to_result
+from . import deobfuscate, fs_rules, prefilters, scan_to_result
+from .. import toolshape
 from ..ai import AIEvidence
 from ..schemas import MinisterResult, ToolCall
 
@@ -40,16 +41,26 @@ class ExecutorMinister:
     def check(self, call: ToolCall) -> MinisterResult:
         parsed = prefilters.ParsedCall(tool=call.tool_name, args=call.arguments, raw_text=call.to_wire_text())
         scan = prefilters.check_executor(parsed)
-        if scan is not None:
+        path_scan = fs_rules.check(call.tool_name, call.arguments)
+        if path_scan is not None and path_scan.verdict == "BLOCK" and (scan is None or scan.verdict != "BLOCK"):
+            scan = path_scan
+        if scan is not None and scan.verdict == "BLOCK":
             return scan_to_result(scan, self.name)
         notes = {}
+        command = toolshape.command_of(call.tool_name, call.arguments)
+        if command is not None:
+            # `p=/etc/shadow; cat "$p"`: check the rules again with literal variables substituted.
+            resolved = fs_rules.resolve_shell_variables(command)
+            rule = _rule_hit(resolved) if resolved != command else None
+            if rule:
+                return self._block(rule, ["shell-variables"], {"via": "deterministic"})
         for text in _code_texts(call):
             hit, note = self._hidden_payload(text)
             if hit is not None:
                 return hit
             if note:
                 notes.update(note)
-        result = scan_to_result(None, self.name)
+        result = scan_to_result(scan or path_scan, self.name)
         if notes:
             result.diagnostics["deobfuscation"] = notes
         return result

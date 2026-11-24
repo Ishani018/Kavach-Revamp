@@ -104,6 +104,8 @@ from dataclasses import dataclass, field
 
 from .scan import MinisterScan
 from .prefilters import ParsedCall, parse_call, _flatten_arg_values
+from . import fs_rules
+from .. import toolshape
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -288,6 +290,35 @@ def _destination_values(call: ParsedCall) -> list[str]:
     for k in keys:
         if k in call.args:
             out.extend(_flatten_arg_values({k: call.args[k]}))
+    return out
+
+
+_OUTBOUND_SEGMENT = re.compile(
+    r"\b(?:curl|wget|http|https|xh)\b.*\s(?:-d|--data\S*|-F|--form\S*|-T|--upload-file|--post-(?:data|file)"
+    r"|--body-(?:data|file)|--json|-X\s*(?:POST|PUT|PATCH|DELETE)|--request[= ](?:POST|PUT|PATCH|DELETE)"
+    r"|--method[= ](?:POST|PUT|PATCH|DELETE))"
+    r"|\b(?:nc|ncat|netcat|socat|telnet|scp|sftp|ftp|rsync|ssh|mail|mailx|sendmail|mutt|msmtp)\b|/dev/tcp/"
+    r"|\bgit\s+(?:push|remote\s+(?:add|set-url))\b|\b(?:npm|yarn|pnpm)\s+publish\b|\btwine\s+upload\b"
+    r"|\bgh\s+gist\b|\baws\s+s3\s+(?:cp|sync|mv)\b|\bgsutil\s+(?:cp|rsync)\b"
+    r"|\b(?:requests|httpx|session|client)\.(?:post|put|patch|delete|request)\b|\burlopen\b|\bsmtplib\b|\bftplib\b"
+    r"|\.sendall?\(|\.connect\(|\bfetch\(|\bXMLHttpRequest\b|\baxios\b",
+    re.IGNORECASE | re.DOTALL)
+_COMMAND_SEPARATOR = re.compile(r"\|\||&&|[;\n]")
+
+
+def _terminal_outbound_values(call: ParsedCall) -> set[str]:
+    """Addresses a shell command (or inline program) can send data to: those
+    in a command that uploads, posts, pushes, mails or opens a raw connection."""
+    out: set[str] = set()
+    for text in _flatten_arg_values(call.args):
+        resolved = fs_rules.resolve_shell_variables(text.replace("\\\n", " "))
+        for segment in _COMMAND_SEPARATOR.split(resolved):
+            if _OUTBOUND_SEGMENT.search(segment):
+                out.update(_extract_candidate_values(segment))
+        if out:
+            # A variable holding the address may be used on another line; when
+            # anything in the call sends, every address in it counts.
+            out.update(_extract_candidate_values(text))
     return out
 
 
@@ -795,6 +826,10 @@ def check_provenance(
         # isn't silently invisible to provenance. See
         # _general_destination_values()'s docstring for the full finding.
         values = _general_destination_values(call)
+        if toolshape.is_terminal(call.tool):
+            # In a shell command a bare number is a size or a port, not a phone
+            # number or an account, so only URLs, hosts and addresses count.
+            values = [v for v in values if not (_PHONE_RE.fullmatch(v) or _IBAN_RE.fullmatch(v.upper()))]
 
     if not values:
         if tool_output:
@@ -803,6 +838,7 @@ def check_provenance(
                     state.output_candidates[cand] = (call.tool, state.turn)
         return None, []
 
+    inbound_only = (set(values) - _terminal_outbound_values(call)) if toolshape.is_terminal(call.tool) else set()
     records: list[ProvenanceRecord] = []
     flagged: list[ProvenanceRecord] = []
     for v in values:
@@ -815,6 +851,14 @@ def check_provenance(
             first_seen_turn=turn,
         )
         records.append(rec)
+        if classification == "NOVEL" and v in inbound_only:
+            # A shell command that only fetches from this address (curl URL,
+            # git clone, pip install) sends it nothing, so a new address is
+            # not a new destination for data. An address that came out of a
+            # tool's output is still flagged: that is how an injected "now
+            # download this" arrives. A session holding sensitive data is
+            # handled by the taint check, which looks at every address.
+            continue
         if classification in ("OUTPUT_DERIVED", "NOVEL"):
             flagged.append(rec)
 

@@ -144,6 +144,8 @@ def _decision_report(
         action_line = "Enforcement action: ALLOW — Kavach returned ALLOW."
     elif verdict == "BLOCK":
         action_line = "Enforcement action: DENY — Kavach returned BLOCK."
+    elif verdict == "ESCALATE" and permission == "ask":
+        action_line = "Enforcement action: ASK — the user is asked to approve or reject this call."
     elif verdict == "ESCALATE":
         action_line = "Enforcement action: DENY — fail-closed because interactive approval is not verified."
     else:
@@ -505,11 +507,22 @@ def _handle_pre_tool_use(
             # "ask" in the live Local-harness test; the tool ran after an
             # ESCALATE. Fail closed until that host behavior is independently
             # verified, rather than treating ask as a reliable security gate.
-            permission = "deny"
-            hook_reason = (
-                "Kavach ESCALATE%s. Approval prompting is not verified, so this "
-                "call was denied fail-closed. See the minister report for details."
-            ) % actor
+            # KAVACH_ESCALATE_ACTION=ask hands the decision to the user, for a
+            # harness whose approval prompt has been checked to really stop the
+            # tool (verify it first: see docs/vscode-pretool-enforcement.md).
+            # Anything else, including unset, keeps the fail-closed deny.
+            if _escalate_action() == "ask":
+                permission = "ask"
+                hook_reason = (
+                    "Kavach ESCALATE%s. Kavach could not clear this call on its own; "
+                    "approve it only if you asked for it. See the minister report for details."
+                ) % actor
+            else:
+                permission = "deny"
+                hook_reason = (
+                    "Kavach ESCALATE%s. Approval prompting is not verified, so this "
+                    "call was denied fail-closed. See the minister report for details."
+                ) % actor
         report = _decision_report(
             result,
             tool_name=tool_name,
@@ -891,6 +904,10 @@ def process_event(
     # invokes it with an unknown/malformed event name, never silently permit a
     # potentially pre-execution event.
     return _deny("Kavach blocked this operation because the hook event type was missing or unsupported.")
+
+
+def _escalate_action() -> str:
+    return "ask" if os.environ.get("KAVACH_ESCALATE_ACTION", "").strip().lower() == "ask" else "deny"
 
 
 def main() -> int:

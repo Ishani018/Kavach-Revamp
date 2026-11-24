@@ -111,7 +111,7 @@ def expand(command: str, resolved: List[Tuple[str, str, str]]) -> str:
         if runner == "bash":
             out.append(content)
         else:
-            out.append(f"{runner} - <<'KAVACH_RESOLVED_{i}'\n{content}\nKAVACH_RESOLVED_{i}")
+            out.append(f"{runner} - <<'RESOLVED_SCRIPT_{i}'\n{content}\nRESOLVED_SCRIPT_{i}")
     return "\n".join(out)
 
 
