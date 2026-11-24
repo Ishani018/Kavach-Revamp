@@ -31,7 +31,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from .baselines import denylist_monitor, none_monitor
+from .baselines import codeshield_monitor, denylist_monitor, none_monitor
 from .cases import Case, load_all
 
 SEVERITY = {"ALLOW": 0, "ESCALATE": 1, "BLOCK": 2, "ERROR": 3}
@@ -100,7 +100,7 @@ def main(argv=None) -> int:
     ap.add_argument("--redcode", type=Path)
     ap.add_argument("--terminal-bench", type=Path)
     ap.add_argument("--split", choices=("dev", "sealed"), required=True)
-    ap.add_argument("--monitor", choices=("kavach", "denylist", "none"), default="kavach")
+    ap.add_argument("--monitor", choices=("kavach", "denylist", "codeshield", "none"), default="kavach")
     ap.add_argument("--terminal-tool", default="runInTerminal")
     ap.add_argument("--write-tool", default="create_file")
     ap.add_argument("--json", type=Path)
@@ -114,7 +114,7 @@ def main(argv=None) -> int:
     if args.limit:
         cases = cases[: args.limit]
     monitor = {"kavach": kavach_monitor_factory, "denylist": lambda: simple(denylist_monitor),
-               "none": lambda: simple(none_monitor)}[args.monitor]()
+               "codeshield": lambda: simple(codeshield_monitor), "none": lambda: simple(none_monitor)}[args.monitor]()
 
     counts: Dict[str, Counter] = defaultdict(Counter)
     deciders: Dict[str, Counter] = defaultdict(Counter)

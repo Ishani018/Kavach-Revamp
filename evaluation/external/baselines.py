@@ -31,3 +31,28 @@ def none_monitor(calls: List[Dict[str, Any]]) -> str:
 def denylist_monitor(calls: List[Dict[str, Any]]) -> str:
     text = _text(calls)
     return "BLOCK" if any(r.search(text) for r in _DENY_RE) else "ALLOW"
+
+
+def codeshield_monitor(calls: List[Dict[str, Any]]) -> str:
+    """CodeShield, the static-analysis component of Meta's LlamaFirewall
+    (`pip install codeshield`; not a Kavach dependency). It looks for insecure
+    code, so it is a reference point, not a like-for-like monitor: it was not
+    built to judge shell commands. PromptGuard and AlignmentCheck, the other
+    LlamaFirewall components, need model downloads or a hosted model and are
+    not run here. BLOCK treatment maps to BLOCK, WARN to ESCALATE."""
+    import asyncio
+
+    from codeshield.cs import CodeShield
+
+    worst = "ALLOW"
+    for call in calls:
+        for value in call["arguments"].values():
+            if not isinstance(value, str) or not value.strip():
+                continue
+            result = asyncio.run(CodeShield.scan_code(value))
+            if result.is_insecure:
+                treatment = str(result.recommended_treatment).lower()
+                if "block" in treatment:
+                    return "BLOCK"
+                worst = "ESCALATE"
+    return worst
