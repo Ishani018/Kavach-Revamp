@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 from .scan import MinisterScan
 from . import struct_parse
+from .. import toolshape
 from . import ast_parse
 
 # Dialects where ast_parse's real grammar parser is both correct AND fast
@@ -607,8 +608,9 @@ def check_vault(call: ParsedCall) -> MinisterScan | None:
     # the reorder-robust net beneath them. Validated independently in
     # test_struct_parse.py.
     for text in values:
-        if call.tool in _AST_FAST_DIALECTS:
-            matched, evidence, used_ast = ast_parse.has_credential_path(text, call.tool)
+        dialect = toolshape.shell_dialect(call.tool)
+        if dialect in _AST_FAST_DIALECTS:
+            matched, evidence, used_ast = ast_parse.has_credential_path(text, dialect)
         else:
             matched, evidence = struct_parse.has_credential_path(text)
             used_ast = False
@@ -1142,8 +1144,9 @@ def check_executor(call: ParsedCall) -> MinisterScan | None:
     # above miss. Runs last (regex rules are more specific). Validated
     # independently in test_struct_parse.py.
     for text in values:
-        if call.tool in _AST_FAST_DIALECTS:
-            matched, evidence, used_ast = ast_parse.is_network_fetch_to_disk(text, call.tool)
+        dialect = toolshape.shell_dialect(call.tool)
+        if dialect in _AST_FAST_DIALECTS:
+            matched, evidence, used_ast = ast_parse.is_network_fetch_to_disk(text, dialect)
         else:
             matched, evidence = struct_parse.is_network_fetch_to_disk(text)
             used_ast = False

@@ -23,13 +23,21 @@ is covered when its semantics are fully determined by the text Kavach sees:
   computing values and printing them (see `python_is_side_effect_free`);
   languages Kavach cannot parse are not covered.
 
-Not covered: background jobs (`&`), compound control flow (if/for/while,
-functions, subshell groups), here-documents, `eval` of anything but a
-literal, and a command name computed at runtime (`$(curl x)`, `$CMD args`),
-which runs code Kavach cannot see. For shells parsed by approximation (zsh, dash use bashlex's POSIX
-grammar), parameter expansion and unquoted globs are also not covered, since
-their semantics differ there: zsh glob qualifiers such as `*(e:cmd:)` and
-parameter flags such as `${(e)var}` execute code.
+* control flow (if/for/while/until, `{ }` and `( )` groups, function
+  definitions): every command in every branch and body is in the text and is
+  analyzed like any other.
+* here-documents and here-strings: the text is visible. When the command
+  reading it is an interpreter with no script operand (`bash <<EOF`,
+  `python3 - <<EOF`) it is a program and is analyzed in that language;
+  otherwise it is input data for a visible command.
+
+Not covered: background jobs (`&`), `eval` of anything but a literal, shell
+constructs the parser does not model (`case`, `select`, arithmetic `for`), and
+a command name computed at runtime (`$(curl x)`, `$CMD args`), which runs code
+Kavach cannot see. For shells parsed by approximation (zsh and dash use
+bashlex's POSIX grammar), the zsh-only forms that execute code are also not
+covered: parameter flags such as `${(e)var}` and glob qualifiers such as
+`*(e:cmd:)`. Plain `$VAR` and `*.py` mean the same there as in POSIX.
 
 The interpreter table below is knowledge about *languages* (which flag
 introduces inline code, and in which language), not a list of trusted
@@ -42,6 +50,8 @@ import ast
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+from ..ast_parse import unquote_heredoc_delimiters
 
 try:
     import bashlex
@@ -69,7 +79,9 @@ _SHORT_CLUSTER = re.compile(r"^-[A-Za-z]{2,3}$")
 
 _ALLOWED_OPERATORS = frozenset({";", "&&", "||", "\n"})
 _ALLOWED_PIPES = frozenset({"|", "|&"})
+_CONTROL_FLOW = frozenset({"compound", "if", "for", "while", "until", "function"})
 _GLOB_CHARS = frozenset("*?[")
+_ZSH_PARAMETER_FLAGS = re.compile(r"\$\{\s*[(=~^]")
 
 
 @dataclass
@@ -88,6 +100,10 @@ def analyze(command: str, *, approximation: bool, _depth: int = 0) -> Optional[C
     """Coverage for a shell command, or None if it does not parse at all."""
     if not _BASHLEX:
         return None
+    # bashlex rejects a quoted here-document delimiter (<<'EOF'). Quoting only
+    # turns expansion off inside the body, so parsing it unquoted is the
+    # stricter reading: any $(...) in the body is then analyzed, not ignored.
+    command = unquote_heredoc_delimiters(command)
     try:
         trees = bashlex.parse(command)
     except Exception:
@@ -121,13 +137,26 @@ def _walk(node, source: str, cov: Coverage, approx: bool, depth: int) -> None:
                 _walk(part, source, cov, approx, depth)
     elif kind == "command":
         _command(node, source, cov, approx, depth)
+    elif kind in _CONTROL_FLOW:
+        # if/for/while/until, { } and ( ) groups, function definitions: the
+        # grammar is only structure, and every command in every branch and body
+        # is in the text, so each is analyzed like any other command.
+        for part in (getattr(node, "list", None) or getattr(node, "parts", None) or []):
+            if part.kind == "reservedword":
+                continue
+            if part.kind == "word":
+                _word(part, source, cov, approx, depth)
+            elif part.kind == "redirect":
+                _redirect(part, None, source, cov, approx, depth)
+            else:
+                _walk(part, source, cov, approx, depth)
     else:
-        # compound groups, if/for/while/until, functions, reserved words
-        cov.fail("compound control flow (" + kind + ")")
+        cov.fail("unsupported shell construct (" + kind + ")")
 
 
 def _command(node, source: str, cov: Coverage, approx: bool, depth: int) -> None:
     words: List[str] = []
+    redirects = []
     for part in node.parts:
         if part.kind == "word":
             if not words and any(p.kind != "tilde" for p in (getattr(part, "parts", None) or [])):
@@ -139,21 +168,75 @@ def _command(node, source: str, cov: Coverage, approx: bool, depth: int) -> None
         elif part.kind == "assignment":
             _word(part, source, cov, approx, depth)
         elif part.kind == "redirect":
-            if getattr(part, "heredoc", None) is not None or part.type in ("<<", "<<-", "<<<"):
-                cov.fail("here-document or here-string")
-            output = getattr(part, "output", None)
-            if output is not None and not isinstance(output, int):
-                _word(output, source, cov, approx, depth)
+            redirects.append(part)
         else:
             cov.fail("unsupported command part (" + part.kind + ")")
+    for part in redirects:
+        _redirect(part, words, source, cov, approx, depth)
     _nested_code(words, node, cov, approx, depth)
+
+
+def _stdin_language(words: Optional[List[str]]) -> Optional[str]:
+    """The language a command reads from standard input as a program, if any:
+    `bash <<EOF`, `python3 - <<EOF`, `sh -s <<EOF`. A runner given a script
+    operand reads that script, so its standard input is data."""
+    for i, word in enumerate(words or []):
+        name = _basename(word)
+        for pattern, options, subcommands, language in _INLINE_RUNNERS:
+            if not pattern.match(name):
+                continue
+            if _inline_code(words, i, options, subcommands) is not None:
+                return None
+            operands = [w for w in words[i + 1:] if not w.startswith("-") or w == "-"]
+            return language if not operands or operands[0] == "-" else None
+        if word and not word.startswith("-") and "=" not in word:
+            return None  # only a leading runner (after env-style assignments) reads the program
+    return None
+
+
+def _redirect(part, words: Optional[List[str]], source: str, cov: Coverage, approx: bool, depth: int) -> None:
+    heredoc = getattr(part, "heredoc", None)
+    is_here = heredoc is not None or part.type in ("<<", "<<-", "<<<")
+    output = getattr(part, "output", None)
+    if not is_here:
+        if output is not None and not isinstance(output, int):
+            _word(output, source, cov, approx, depth)
+        return
+    # A here-document's text is in the command. It is a program only when the
+    # command reading it is an interpreter with no script operand; then it is
+    # analyzed in that language, exactly like `-c CODE`. Otherwise it is input
+    # data for a command that is itself visible.
+    if heredoc is not None:
+        body = getattr(heredoc, "value", None)
+    else:
+        body = getattr(output, "word", None) if output is not None and not isinstance(output, int) else None
+        if output is not None and not isinstance(output, int):
+            _word(output, source, cov, approx, depth)
+    language = _stdin_language(words)
+    if language is None:
+        return
+    if body is None:
+        cov.fail("here-document whose text could not be read")
+        return
+    cov.nested.append(language)
+    if language == "shell:real":
+        _nested_shell(body, cov, False, depth)
+    elif language == "shell:approx":
+        _nested_shell(body, cov, True, depth)
+    elif language == "python":
+        if not python_is_side_effect_free(body):
+            cov.fail("Python on standard input with effects beyond computing and printing values")
+    else:
+        cov.fail(language.split(":", 1)[1] + " code on standard input Kavach cannot parse")
 
 
 def _word(node, source: str, cov: Coverage, approx: bool, depth: int) -> None:
     for part in getattr(node, "parts", None) or []:
         if part.kind == "parameter":
-            if approx:
-                cov.fail("parameter expansion under an approximated shell grammar")
+            # Plain $VAR / ${VAR} / ${VAR:-x} mean the same in zsh and dash as in
+            # POSIX. zsh parameter flags, ${(e)var} above all, can run code.
+            if approx and _ZSH_PARAMETER_FLAGS.search(source[node.pos[0]:node.pos[1]]):
+                cov.fail("zsh parameter flags under an approximated shell grammar")
         elif part.kind in ("commandsubstitution", "processsubstitution"):
             inner = getattr(part, "command", None)
             if inner is None:
@@ -164,12 +247,14 @@ def _word(node, source: str, cov: Coverage, approx: bool, depth: int) -> None:
             continue
         else:
             cov.fail("unsupported word expansion (" + part.kind + ")")
-    if approx and _has_unquoted_glob(source[node.pos[0]:node.pos[1]]):
-        cov.fail("unquoted glob under an approximated shell grammar")
+    if approx and _has_glob_qualifier(source[node.pos[0]:node.pos[1]]):
+        cov.fail("zsh glob qualifier under an approximated shell grammar")
 
 
-def _has_unquoted_glob(raw: str) -> bool:
-    quote, escaped = None, False
+def _has_glob_qualifier(raw: str) -> bool:
+    """An unquoted glob followed by `(`: zsh glob qualifiers such as
+    `*(e:cmd:)` run code. A plain `*.py` means the same as in POSIX."""
+    quote, escaped, seen_glob = None, False, False
     for ch in raw:
         if escaped:
             escaped = False
@@ -181,6 +266,8 @@ def _has_unquoted_glob(raw: str) -> bool:
         elif ch in ("'", '"'):
             quote = ch
         elif ch in _GLOB_CHARS:
+            seen_glob = True
+        elif ch == "(" and seen_glob:
             return True
     return False
 

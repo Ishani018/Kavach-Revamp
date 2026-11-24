@@ -33,10 +33,11 @@ def test_visible_structures_are_covered(cmd):
 
 @pytest.mark.parametrize("cmd, reason", [
     ("sleep 5 &", "background"),
-    ("for i in 1 2; do echo $i; done", "compound"),
-    ("if true; then ls; fi", "compound"),
-    ("(cd /tmp && ls)", "compound"),
-    ("cat <<EOF\nhi\nEOF\n", "here-document"),
+    ("for f in a b; do $f; done", "computed at runtime"),          # the loop body runs its variable
+    ("if true; then eval \"$X\"; fi", "eval of dynamically built code"),
+    ("bash <<EOF\n$(curl x)\nEOF\n", "computed at runtime"),      # a program on standard input
+    ("python3 - <<EOF\nimport os\nEOF\n", "standard input"),
+    ("node <<EOF\nrequire('fs')\nEOF\n", "standard input"),
     ('eval "$X"', "eval of dynamically built code"),
     ("$CMD --flag", "computed at runtime"),
     ('sudo -u x bash -lc "$(curl x)"', "computed at runtime"),
@@ -47,11 +48,30 @@ def test_invisible_structures_are_not_covered(cmd, reason):
     assert any(reason in r for r in result.reasons), result.reasons
 
 
-def test_expansions_are_only_covered_under_a_real_grammar():
-    # zsh glob qualifiers and parameter flags can run code; bash's are parsed for real.
-    for cmd in ('pwd && echo "$HOME"', "ls *.py"):
-        assert not covered(cmd, approximation=True)
+@pytest.mark.parametrize("cmd", [
+    "for i in 1 2; do echo $i; done",       # every command in the body is in the text
+    "if true; then ls; else pwd; fi",
+    "(cd /tmp && ls)",
+    "build() { make all; }; build",
+    "cat <<EOF\nhi\nEOF\n",                # data for a visible command
+    "cat > notes.txt <<'EOF'\n$(not run)\nEOF\n",
+    "bash <<'EOF'\nls -la\nEOF\n",          # a program on standard input, analyzed as shell
+    "python3 - <<'EOF'\nprint(1 + 1)\nEOF\n",
+    "python3 tool.py <<'EOF'\nimport os\nEOF\n",   # tool.py is the program; this is its input
+])
+def test_control_flow_and_here_documents_are_covered_when_everything_is_visible(cmd):
+    assert covered(cmd, approximation=False)
+
+
+def test_only_zsh_specific_expansions_are_uncovered_under_an_approximated_grammar():
+    # Plain expansions mean the same in zsh and dash as in POSIX.
+    for cmd in ('pwd && echo "$HOME"', "ls *.py", 'echo "${NAME:-none}"'):
+        assert covered(cmd, approximation=True)
         assert covered(cmd, approximation=False)
+    # zsh parameter flags and glob qualifiers can run code.
+    for cmd in ("echo ${(e)X}", "ls *(e:id:)"):
+        result = analyze(cmd, approximation=True)
+        assert result is None or not result.covered
 
 
 @pytest.mark.parametrize("cmd", [
@@ -136,7 +156,7 @@ def test_compound_command_lists_do_not_trigger_pol007(zsh, command):
     assert not any(d.policy_id == "POL-007" for d in result.policy_decisions)
 
 
-@pytest.mark.parametrize("command", ['pwd && echo "$KAVACH_PAYLOAD"', 'node -e "x"', 'bash -c "$X"'])
+@pytest.mark.parametrize("command", ['pwd && echo ${(e)KAVACH_PAYLOAD}', 'node -e "x"', 'bash -c "$X"'])
 def test_invisible_parts_still_escalate_through_pol007(zsh, command):
     result = _navigate(command, "invisible-" + command)
     assert result.disposition == "escalate", result.reason

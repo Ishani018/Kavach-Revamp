@@ -40,6 +40,8 @@ as struct_parse.py itself.
 """
 from __future__ import annotations
 
+import re
+
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -68,6 +70,16 @@ class AstExtractResult:
     dialect: str | None = None
 
 
+_QUOTED_HEREDOC = re.compile(r"(<<-?\s*)(['\"])(\w+)\2")
+
+
+def unquote_heredoc_delimiters(cmd: str) -> str:
+    """bashlex rejects a quoted here-document delimiter (<<'EOF'). Quoting only
+    turns expansion off inside the body, so parsing it unquoted is the stricter
+    reading: a $(...) in the body is then analyzed instead of ignored."""
+    return _QUOTED_HEREDOC.sub(lambda m: m.group(1) + m.group(3), cmd)
+
+
 def _bashlex_words(cmd: str) -> list[str] | None:
     """Walks a bashlex AST, returning only words that are real command
     arguments -- never heredoc body content, comments, or (per bashlex's
@@ -75,7 +87,7 @@ def _bashlex_words(cmd: str) -> list[str] | None:
     command's string argument. Returns None on any parse failure (falls
     back to the tokenizer, never raises)."""
     try:
-        trees = bashlex.parse(cmd)
+        trees = bashlex.parse(unquote_heredoc_delimiters(cmd))
     except Exception:
         return None
 

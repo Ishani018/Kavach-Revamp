@@ -32,7 +32,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, Union
 
-from . import speaker
+from . import speaker, toolshape, written_files
 from .agents import AgentNode, AgentRegistry
 from .schemas import (
     CONTENT_EVENTS, MINISTER_NAMES, VERDICTS, Decision, MinisterResult, Observation,
@@ -63,6 +63,7 @@ class Coordinator:
         self._ministers = [by_name[n] for n in MINISTER_NAMES]  # fixed call order
         self.registry = registry or AgentRegistry()
         self._stats: Dict[str, _DomainStats] = {}
+        self._written = written_files.WrittenFiles()
         self._stats_lock = threading.Lock()
 
     # ---- proposed calls ---------------------------------------------------
@@ -77,7 +78,7 @@ class Coordinator:
         scoped = call.model_copy(update={"session_id": domain, "agent_depth": node.depth})
 
         with self.registry.domain_lock(domain):
-            results = self._run_all(scoped)
+            results = self._run_all(self._with_written_scripts(domain, scoped))
             sv = speaker.decide(results.values())
             self._record_decision(domain, call.tool_name, sv, results)
 
@@ -91,6 +92,24 @@ class Coordinator:
             domain_id=domain,
             agent_depth=node.depth,
         )
+
+    def _with_written_scripts(self, domain: str, call: ToolCall) -> ToolCall:
+        """Remember what write tools put in files, and when a terminal call runs
+        one of them, show the ministers the file's content too (written_files.py)."""
+        written = toolshape.write_of(call.tool_name, call.arguments)
+        if written is not None:
+            self._written.record(domain, *written)
+            return call
+        command = toolshape.command_of(call.tool_name, call.arguments)
+        if command is None:
+            return call
+        resolved = self._written.resolve(domain, command)
+        self._written.record_heredoc_writes(domain, command)
+        if not resolved:
+            return call
+        key = written_files.command_key(call.arguments)
+        arguments = dict(call.arguments, **{key: written_files.expand(command, resolved)})
+        return call.model_copy(update={"arguments": arguments})
 
     def _run_all(self, call: ToolCall) -> Dict[str, MinisterResult]:
         independent = [m for m in self._ministers if not callable(getattr(m, "check_with_context", None))]

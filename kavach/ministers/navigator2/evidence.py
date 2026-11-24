@@ -259,7 +259,7 @@ class DecodeExecutionEvidenceModule(EvidenceModule):
             return []  # out of scope for this module; ShellEvidenceModule reports unknown/unsupported dialect coverage
         try:
             # zsh/dash use bashlex only as a conservative common-syntax approximation.
-            trees = bashlex.parse(cmd)
+            trees = bashlex.parse(ast_parse.unquote_heredoc_delimiters(cmd))
         except Exception:
             return [EvidenceFinding(
                 module=self.name, claim="bash parse failed; decode-execution flow not resolvable",
